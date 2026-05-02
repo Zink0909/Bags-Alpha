@@ -1,22 +1,11 @@
-import { analyzeTokens, analyzePools } from '@/lib/analyze';
+import { analyzeTokens } from '@/lib/analyze';
 import RadarClient from '@/components/RadarClient';
-
+ 
 export const revalidate = 60;
-
+ 
 export default async function Home() {
-  const [feedTokens, poolTokens] = await Promise.allSettled([
-    analyzeTokens(100),
-    analyzePools(50),
-  ]);
-
-  const feedData = feedTokens.status === 'fulfilled' ? feedTokens.value : [];
-  const poolData = poolTokens.status === 'fulfilled' ? poolTokens.value : [];
-
-  const mintsSeen = new Set(feedData.map(t => t.mint));
-  const uniquePoolData = poolData.filter(t => !mintsSeen.has(t.mint));
-  const tokens = [...feedData, ...uniquePoolData]
-  .sort((a, b) => b.potentialScore - a.potentialScore);
-
+  const tokens = await analyzeTokens(100);
+ 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white font-mono">
       <header className="border-b border-white/10 px-6 py-4 flex items-center justify-between">
