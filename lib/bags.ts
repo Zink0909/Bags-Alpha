@@ -28,3 +28,27 @@ export const getQuote = (inputMint: string, outputMint: string, amount: number) 
 
 // SOL mint address
 export const SOL_MINT = 'So11111111111111111111111111111111111111112';
+
+export const getAssetMetadata = async (mint: string) => {
+  const res = await fetch('https://api.mainnet-beta.solana.com', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getAsset',
+      params: { id: mint }
+    }),
+    next: { revalidate: 3600 }
+  });
+  const data = await res.json();
+  const content = data.result?.content;
+  return {
+    name: content?.metadata?.name || '',
+    symbol: content?.metadata?.symbol || '',
+    image: content?.links?.image || '',
+  };
+};
+
+export const getAllPools = () =>
+  get('/solana/bags/pools');

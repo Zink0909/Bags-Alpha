@@ -1,11 +1,13 @@
 import {
-  getFeed, getLifetimeFees, getClaimStats, getPool
+  getFeed, getLifetimeFees, getClaimStats, getPool, getCreators,
+  getAssetMetadata, getAllPools
 } from './bags';
 import {
   computeTag, computePotentialScore, computeRiskScore,
   feesToConversionScore, placeholderAttentionScore,
   type TokenScore
 } from './score';
+import { getTwitterSignal } from './twitter';
 
 function safeLamports(val: any): number {
   if (!val || typeof val !== 'string') return 0;
@@ -22,10 +24,11 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
     tokens.map(async (token: any) => {
       const mint = token.tokenMint;
 
-      const [feesRaw, claimRaw, poolRaw] = await Promise.allSettled([
+      const [feesRaw, claimRaw, poolRaw, twitterRaw] = await Promise.allSettled([
         getLifetimeFees(mint),
         getClaimStats(mint),
         getPool(mint),
+        token.symbol ? getTwitterSignal(token.symbol) : Promise.resolve(null),
       ]);
 
       const lifetimeFeesSol = feesRaw.status === 'fulfilled'
@@ -46,7 +49,12 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
       const isGraduated = !!poolData?.dammV2PoolKey;
       const hasPool = !!poolData;
 
-      const attentionScore = placeholderAttentionScore(token.twitter || '');
+      const twitterSignal = twitterRaw.status === 'fulfilled' && twitterRaw.value
+        ? twitterRaw.value
+        : null;
+      const attentionScore = twitterSignal
+        ? twitterSignal.attentionScore
+        : placeholderAttentionScore(token.twitter || '');
       const conversionScore = feesToConversionScore(lifetimeFeesSol);
       const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
       const riskScore = computeRiskScore(isGraduated, lifetimeFeesSol, !!(token.twitter));
@@ -78,5 +86,96 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
     .filter(r => r.status === 'fulfilled')
     .map(r => (r as PromiseFulfilledResult<TokenScore>).value)
     .filter(t => t.lifetimeFeesSol > 0 || t.hasPool)
+    .sort((a, b) => b.potentialScore - a.potentialScore);
+}
+
+export async function analyzePools(limit = 50): Promise<TokenScore[]> {
+  const allPools = await getAllPools();
+  if (!allPools || !Array.isArray(allPools)) return [];
+
+  // 随机取一批，避免每次都是同样的 pool
+  const shuffled = allPools.sort(() => Math.random() - 0.5).slice(0, 200);
+
+  // 批量查 fees，过滤甜蜜点
+  const withFees = await Promise.allSettled(
+    shuffled.map(async (pool: any) => {
+      const feesRaw = await getLifetimeFees(pool.tokenMint);
+      const sol = safeLamports(feesRaw);
+      if (sol < 0.05 || sol > 5) return null;
+      return { mint: pool.tokenMint, sol, isGraduated: !!pool.dammV2PoolKey };
+    })
+  );
+
+  const sweetspot = withFees
+    .filter(r => r.status === 'fulfilled' && r.value !== null)
+    .map(r => (r as PromiseFulfilledResult<any>).value)
+    .sort((a, b) => b.sol - a.sol)
+    .slice(0, limit);
+
+  // 补全 metadata
+  const results = await Promise.allSettled(
+    sweetspot.map(async (p: any) => {
+      const [meta, creatorsRaw, claimRaw, twitterReady] = await Promise.allSettled([
+        getAssetMetadata(p.mint),
+        getCreators(p.mint),
+        getClaimStats(p.mint),
+        Promise.resolve(null),
+      ]);
+
+      const metadata = meta.status === 'fulfilled' ? meta.value : { name: '', symbol: '', image: '' };
+      const creators = creatorsRaw.status === 'fulfilled' ? (creatorsRaw.value || []) : [];
+      const claimData = claimRaw.status === 'fulfilled' ? (claimRaw.value || []) : [];
+
+      const totalClaimed = Array.isArray(claimData)
+        ? claimData.reduce((sum: number, c: any) => sum + safeLamports(c.totalClaimed), 0)
+        : 0;
+
+      const twitterUrl = creators[0]?.twitterUsername
+        ? 'https://x.com/' + creators[0].twitterUsername
+        : '';
+
+      const unclaimedRatio = p.sol > 0
+        ? Math.min((p.sol - totalClaimed) / p.sol, 1)
+        : 0;
+      const momentumScore = Math.round(unclaimedRatio * 100);
+
+      const twitterSignal = metadata.symbol
+        ? await getTwitterSignal(metadata.symbol).catch(() => null)
+        : null;
+
+      const attentionScore = twitterSignal
+        ? twitterSignal.attentionScore
+        : placeholderAttentionScore(twitterUrl);
+
+      const conversionScore = feesToConversionScore(p.sol);
+      const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
+      const riskScore = computeRiskScore(p.isGraduated, p.sol, !!twitterUrl);
+      const tag = computeTag(attentionScore, conversionScore);
+
+      return {
+        mint: p.mint,
+        name: metadata.name,
+        symbol: metadata.symbol,
+        twitter: twitterUrl,
+        image: metadata.image,
+        status: p.isGraduated ? 'GRADUATED' : 'PRE_GRAD',
+        lifetimeFeesSol: p.sol,
+        feeVelocity: totalClaimed,
+        hasPool: true,
+        isGraduated: p.isGraduated,
+        creatorTwitter: twitterUrl,
+        attentionScore,
+        conversionScore,
+        momentumScore,
+        potentialScore,
+        riskScore,
+        tag,
+      } as TokenScore;
+    })
+  );
+
+  return results
+    .filter(r => r.status === 'fulfilled')
+    .map(r => (r as PromiseFulfilledResult<TokenScore>).value)
     .sort((a, b) => b.potentialScore - a.potentialScore);
 }
