@@ -177,7 +177,7 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
         </div>
 
         <a
-          href={"https://bags.fm/token/" + mint}
+          href={"https://bags.fm/" + mint}
           className="block text-center py-3 rounded-lg border border-emerald-400/30 text-emerald-400 text-sm font-bold hover:bg-emerald-400/10 transition-colors"
         >
           Trade on Bags.fm

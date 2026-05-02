@@ -18,7 +18,7 @@ const TAG_ICONS: Record<string, string> = {
 export default function TokenCard({ token }: { token: TokenScore }) {
   const tagStyle = TAG_STYLES[token.tag] ?? TAG_STYLES["No Signal"];
   const tagIcon  = TAG_ICONS[token.tag]  ?? "·";
-  const bagsUrl  = "https://bags.fm/token/" + token.mint;
+  const bagsUrl  = "https://bags.fm/" + token.mint;
   return (
     <Link href={"/token/" + token.mint} className="block border border-white/10 rounded-lg p-4 hover:border-white/25 hover:bg-white/[0.02] transition-all">
       <div className="flex items-start justify-between gap-3 mb-3">

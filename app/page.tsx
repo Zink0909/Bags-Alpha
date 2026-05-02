@@ -4,7 +4,7 @@ import RadarClient from '@/components/RadarClient';
 export const revalidate = 60;
 
 export default async function Home() {
-  const tokens = await analyzeTokens(30);
+  const tokens = await analyzeTokens(50);
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white font-mono">

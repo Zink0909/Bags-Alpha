@@ -12,7 +12,7 @@ function safeLamports(val: any): number {
   try { return Number(BigInt(val)) / 1e9; } catch { return 0; }
 }
 
-export async function analyzeTokens(limit = 20): Promise<TokenScore[]> {
+export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
   const feed = await getFeed();
   if (!feed || !Array.isArray(feed)) return [];
 
@@ -77,5 +77,6 @@ export async function analyzeTokens(limit = 20): Promise<TokenScore[]> {
   return results
     .filter(r => r.status === 'fulfilled')
     .map(r => (r as PromiseFulfilledResult<TokenScore>).value)
+    .filter(t => t.lifetimeFeesSol > 0 || t.hasPool)
     .sort((a, b) => b.potentialScore - a.potentialScore);
 }

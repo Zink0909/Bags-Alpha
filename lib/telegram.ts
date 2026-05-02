@@ -26,7 +26,7 @@ export async function sendTelegramAlert(message: string) {
 
 export function formatAlert(token: any): string {
   const dot = String.fromCharCode(46);
-  const bagsUrl = "https://bags" + dot + "fm/token/" + token.mint;
+  const bagsUrl = "https://bags" + dot + "fm/" + token.mint;
   const tagEmoji: Record<string, string> = {
     "Breakout": "⚡",
     "Fake Hype": "⚠",

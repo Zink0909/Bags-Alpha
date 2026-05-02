@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import TokenCard from './TokenCard';
 import { TokenScore } from '@/lib/score';
 
@@ -8,9 +9,11 @@ type Tag = 'All' | 'Breakout' | 'Stealth Gem' | 'Fake Hype' | 'No Signal';
 type SortKey = 'potentialScore' | 'lifetimeFeesSol' | 'riskScore';
 
 export default function RadarClient({ tokens }: { tokens: TokenScore[] }) {
+    
   const [activeTag, setActiveTag] = useState<Tag>('All');
   const [sortKey, setSortKey] = useState<SortKey>('potentialScore');
   const [sortAsc, setSortAsc] = useState(false);
+  const router = useRouter();
 
   const filtered = tokens
     .filter(t => activeTag === 'All' || t.tag === activeTag)
@@ -18,6 +21,13 @@ export default function RadarClient({ tokens }: { tokens: TokenScore[] }) {
       const diff = a[sortKey] - b[sortKey];
       return sortAsc ? diff : -diff;
     });
+
+    useEffect(() => {
+  const interval = setInterval(() => {
+    router.refresh();
+  }, 60000);
+  return () => clearInterval(interval);
+    }, [router]);
 
   const counts = {
     Breakout: tokens.filter(t => t.tag === 'Breakout').length,
