@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.SUPABASE_URL!;
-const key = process.env.SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(url, key);
+export const getSupabase = () => {
+  const url = process.env.SUPABASE_URL!;
+  const key = process.env.SUPABASE_ANON_KEY!;
+  return createClient(url, key);
+};
 
 export async function saveSnapshot(tokens: any[]) {
   if (!tokens.length) return;
@@ -24,7 +25,7 @@ export async function saveSnapshot(tokens: any[]) {
     captured_at: new Date().toISOString(),
   }));
 
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('token_snapshots')
     .insert(rows);
 
@@ -35,7 +36,7 @@ export async function saveSnapshot(tokens: any[]) {
 export async function getFeeHistory(mint: string, hours = 24) {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('token_snapshots')
     .select('lifetime_fees_sol, attention_score, captured_at')
     .eq('mint', mint)
