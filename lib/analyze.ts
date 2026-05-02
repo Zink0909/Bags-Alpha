@@ -7,6 +7,11 @@ import {
   type TokenScore
 } from './score';
 
+function safeLamports(val: any): number {
+  if (!val || typeof val !== 'string') return 0;
+  try { return Number(BigInt(val)) / 1e9; } catch { return 0; }
+}
+
 export async function analyzeTokens(limit = 20): Promise<TokenScore[]> {
   const feed = await getFeed();
   if (!feed || !Array.isArray(feed)) return [];
@@ -23,38 +28,28 @@ export async function analyzeTokens(limit = 20): Promise<TokenScore[]> {
         getPool(mint),
       ]);
 
-      // lifetime fees
-      const feesStr = feesRaw.status === 'fulfilled' ? feesRaw.value : '0';
-      const lifetimeFeesSol = Number(BigInt(feesStr || '0')) / 1e9;
-
-      // claim stats — totalClaimed 作为 momentum proxy
-      const claimData = claimRaw.status === 'fulfilled' ? claimRaw.value : [];
-      const totalClaimed = Array.isArray(claimData)
-        ? claimData.reduce((sum: number, c: any) => {
-            return sum + Number(BigInt(c.totalClaimed || '0')) / 1e9;
-          }, 0)
+      const lifetimeFeesSol = feesRaw.status === 'fulfilled'
+        ? safeLamports(feesRaw.value)
         : 0;
 
-      // unclaimed = lifetime - claimed，比例越高说明 fee 积累越快（momentum）
+      const claimData = claimRaw.status === 'fulfilled' ? claimRaw.value : [];
+      const totalClaimed = Array.isArray(claimData)
+        ? claimData.reduce((sum: number, c: any) => sum + safeLamports(c.totalClaimed), 0)
+        : 0;
+
       const unclaimedRatio = lifetimeFeesSol > 0
         ? Math.min((lifetimeFeesSol - totalClaimed) / lifetimeFeesSol, 1)
         : 0;
       const momentumScore = Math.round(unclaimedRatio * 100);
 
-      // pool
       const poolData = poolRaw.status === 'fulfilled' ? poolRaw.value : null;
       const isGraduated = !!poolData?.dammV2PoolKey;
       const hasPool = !!poolData;
 
-      // scores
       const attentionScore = placeholderAttentionScore(token.twitter || '');
       const conversionScore = feesToConversionScore(lifetimeFeesSol);
-      const potentialScore = computePotentialScore(
-        attentionScore, conversionScore, momentumScore
-      );
-      const riskScore = computeRiskScore(
-        isGraduated, lifetimeFeesSol, !!(token.twitter)
-      );
+      const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
+      const riskScore = computeRiskScore(isGraduated, lifetimeFeesSol, !!(token.twitter));
       const tag = computeTag(attentionScore, conversionScore);
 
       return {

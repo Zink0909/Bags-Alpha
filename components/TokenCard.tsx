@@ -1,4 +1,7 @@
+'use client';
+
 import { TokenScore } from "@/lib/score";
+import Link from 'next/link';
 
 const TAG_STYLES: Record<string, string> = {
   "Breakout":    "bg-emerald-400/10 text-emerald-400 border-emerald-400/30",
@@ -17,7 +20,7 @@ export default function TokenCard({ token }: { token: TokenScore }) {
   const tagIcon  = TAG_ICONS[token.tag]  ?? "·";
   const bagsUrl  = "https://bags.fm/token/" + token.mint;
   return (
-    <a href={"/token/" + token.mint} className="block border border-white/10 rounded-lg p-4 hover:border-white/25 hover:bg-white/[0.02] transition-all">
+    <Link href={"/token/" + token.mint} className="block border border-white/10 rounded-lg p-4 hover:border-white/25 hover:bg-white/[0.02] transition-all">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
           {token.image && (<img src={token.image} alt={token.symbol} width={32} height={32} className="rounded-full w-8 h-8 object-cover" />)}
@@ -46,6 +49,6 @@ export default function TokenCard({ token }: { token: TokenScore }) {
         <span>{token.lifetimeFeesSol.toFixed(4)} SOL fees</span>
         <span className={token.riskScore > 70 ? "text-red-400/70" : "text-white/30"}>Risk {token.riskScore}</span>
       </div>
-    </a>
+    </Link>
   );
 }
