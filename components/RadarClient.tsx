@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import TokenCard from './TokenCard';
 import { TokenScore } from '@/lib/score';
 
@@ -11,6 +11,12 @@ export default function RadarClient({ tokens }: { tokens: TokenScore[] }) {
   const [activeTag, setActiveTag] = useState<Tag>('All');
   const [sortKey, setSortKey] = useState<SortKey>('potentialScore');
   const [sortAsc, setSortAsc] = useState(false);
+  useEffect(() => {
+  const interval = setInterval(() => {
+    window.location.reload();
+  }, 60000);
+  return () => clearInterval(interval);
+}, []);
 
   const filtered = tokens
     .filter(t => activeTag === 'All' || t.tag === activeTag)
