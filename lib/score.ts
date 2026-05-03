@@ -17,6 +17,8 @@ export interface TokenScore {
   attentionScore: number;
   qualityScore: number;      // Claude NLP quality score 0-100
   tweetCount: number;        // number of tweets found
+  sentimentScore: number;        // -100 to +100
+  creatorPostFrequency: number;  // posts per week
   conversionScore: number;
   momentumScore: number;
 

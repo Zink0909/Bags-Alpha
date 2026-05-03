@@ -85,6 +85,8 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
         potentialScore,
         riskScore,
         tag,
+        sentimentScore: twitterSignal?.sentimentScore || 0,
+        creatorPostFrequency: twitterSignal?.creatorPostFrequency || 0,
       } as TokenScore;
     })
   );
@@ -178,6 +180,8 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
         potentialScore,
         riskScore,
         tag,
+        sentimentScore: twitterSignal?.sentimentScore || 0,
+        creatorPostFrequency: twitterSignal?.creatorPostFrequency || 0,
       } as TokenScore;
     })
   );
