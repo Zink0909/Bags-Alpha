@@ -2,65 +2,9 @@ import { getLifetimeFees, getCreators, getClaimStats, getPool, getQuote, SOL_MIN
 import { feesToConversionScore, placeholderAttentionScore, computeRiskScore, computeTag, computePotentialScore } from '@/lib/score';
 import { getTwitterSignal } from '@/lib/twitter';
 import { getFeeHistory } from '@/lib/supabase';
+import FeeChart from '@/components/FeeChart';
 
 export const revalidate = 3600;
-
-function FeeChart({ data }: { data: { lifetime_fees_sol: number; captured_at: string }[] }) {
-  if (data.length < 2) return null;
-
-  const W = 680, H = 80, PAD = 8;
-  const fees = data.map(d => d.lifetime_fees_sol);
-  const minF = Math.min(...fees);
-  const maxF = Math.max(...fees);
-  const range = maxF - minF || 1;
-
-  const points = data.map((d, i) => {
-    const x = PAD + (i / (data.length - 1)) * (W - PAD * 2);
-    const y = H - PAD - ((d.lifetime_fees_sol - minF) / range) * (H - PAD * 2);
-    return `${x},${y}`;
-  });
-
-  const polyline = points.join(' ');
-  const areaPoints = `${PAD},${H - PAD} ` + polyline + ` ${W - PAD},${H - PAD}`;
-
-  const feeGrowth = fees[fees.length - 1] - fees[0];
-  const growthColor = feeGrowth > 0 ? '#34d399' : '#f87171';
-
-  const firstTime = new Date(data[0].captured_at).toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const lastTime = new Date(data[data.length - 1].captured_at).toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-  return (
-    <div style={{ marginTop: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
-        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px', letterSpacing: '0.08em' }}>FEE GROWTH TREND</span>
-        <span style={{ color: growthColor, fontSize: '11px', fontWeight: 600 }}>
-          {feeGrowth >= 0 ? '+' : ''}{feeGrowth.toFixed(4)} SOL over {data.length} snapshots
-        </span>
-      </div>
-      <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '8px', padding: '8px', border: '1px solid rgba(255,255,255,0.04)', overflow: 'hidden' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '60px', display: 'block' }}>
-          <defs>
-            <linearGradient id="feeGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={growthColor} stopOpacity="0.3" />
-              <stop offset="100%" stopColor={growthColor} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <polygon points={areaPoints} fill="url(#feeGrad)" />
-          <polyline points={polyline} fill="none" stroke={growthColor} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-          {data.map((d, i) => {
-            const x = PAD + (i / (data.length - 1)) * (W - PAD * 2);
-            const y = H - PAD - ((d.lifetime_fees_sol - minF) / range) * (H - PAD * 2);
-            return <circle key={i} cx={x} cy={y} r="2.5" fill={growthColor} opacity="0.8" />;
-          })}
-        </svg>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px' }}>{firstTime}</span>
-        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px' }}>{lastTime}</span>
-      </div>
-    </div>
-  );
-}
 
 export default async function TokenDetail({ params }: { params: Promise<{ mint: string }> }) {
   const { mint } = await params;
