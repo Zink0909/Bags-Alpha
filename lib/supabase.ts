@@ -40,21 +40,32 @@ export async function saveSnapshot(tokens: any[]) {
 export async function getLatestSnapshot() {
   const supabase = getSupabase();
 
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const { data, error } = await supabase
     .from('token_snapshots')
     .select('*')
-    .gte('captured_at', twoHoursAgo)
-    .order('potential_score', { ascending: false })
-    .limit(100);
+    .gte('captured_at', oneDayAgo)
+    .order('captured_at', { ascending: false })
+    .limit(500);
 
   if (error) {
     console.error('Supabase read error:', error);
     return [];
   }
 
-  return (data || []).map((row: any) => ({
+  // deduplicate: keep only the latest snapshot per mint
+  const seen = new Set<string>();
+  const unique = (data || []).filter((row: any) => {
+    if (seen.has(row.mint)) return false;
+    seen.add(row.mint);
+    return true;
+  });
+
+  // sort by potential_score descending
+  unique.sort((a: any, b: any) => (b.potential_score || 0) - (a.potential_score || 0));
+
+  return unique.slice(0, 100).map((row: any) => ({
     mint: row.mint,
     name: row.name || '',
     symbol: row.symbol || '',
@@ -66,7 +77,7 @@ export async function getLatestSnapshot() {
     hasPool: true,
     isGraduated: false,
     creatorTwitter: row.twitter || '',
-    attentionScore: row.attention_score || 10,
+    attentionScore: row.attention_score || 5,
     conversionScore: row.conversion_score || 0,
     momentumScore: row.momentum_score || 0,
     potentialScore: row.potential_score || 0,

@@ -5,111 +5,165 @@ import { useRouter } from 'next/navigation';
 import TokenCard from './TokenCard';
 import { TokenScore } from '@/lib/score';
 
-type Tag = 'All' | 'Breakout' | 'Stealth Gem' | 'Fake Hype' | 'No Signal';
-type SortKey = 'potentialScore' | 'lifetimeFeesSol' | 'riskScore';
+type Tag = 'All' | 'Breakout' | 'Stealth Gem' | 'Fake Hype';
 
 export default function RadarClient({ tokens }: { tokens: TokenScore[] }) {
-    
   const [activeTag, setActiveTag] = useState<Tag>('All');
-  const [sortKey, setSortKey] = useState<SortKey>('potentialScore');
-  const [sortAsc, setSortAsc] = useState(false);
+  const [blink, setBlink] = useState(true);
   const router = useRouter();
 
-  const filtered = tokens
-    .filter(t => activeTag === 'All' || t.tag === activeTag)
-    .sort((a, b) => {
-      const diff = a[sortKey] - b[sortKey];
-      return sortAsc ? diff : -diff;
-    });
+  useEffect(() => {
+    const interval = setInterval(() => router.refresh(), 60000);
+    return () => clearInterval(interval);
+  }, [router]);
 
-    useEffect(() => {
-  const interval = setInterval(() => {
-    router.refresh();
-  }, 60000);
-  return () => clearInterval(interval);
-    }, [router]);
+  useEffect(() => {
+    const b = setInterval(() => setBlink(v => !v), 900);
+    return () => clearInterval(b);
+  }, []);
 
-  const counts = {
-    Breakout: tokens.filter(t => t.tag === 'Breakout').length,
-    'Stealth Gem': tokens.filter(t => t.tag === 'Stealth Gem').length,
-    'Fake Hype': tokens.filter(t => t.tag === 'Fake Hype').length,
-    'No Signal': tokens.filter(t => t.tag === 'No Signal').length,
-  };
+  const breakouts   = tokens.filter(t => t.tag === 'Breakout');
+  const stealths    = tokens.filter(t => t.tag === 'Stealth Gem');
+  const fakeHypes   = tokens.filter(t => t.tag === 'Fake Hype');
 
-  const TAG_STYLES: Record<string, string> = {
-    'Breakout': 'text-emerald-400 border-emerald-400/40',
-    'Stealth Gem': 'text-yellow-400 border-yellow-400/40',
-    'Fake Hype': 'text-red-400 border-red-400/40',
-    'No Signal': 'text-white/30 border-white/10',
-    'All': 'text-white border-white/20',
-  };
+  const counts = { Breakout: breakouts.length, 'Stealth Gem': stealths.length, 'Fake Hype': fakeHypes.length };
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortAsc(!sortAsc);
-    else { setSortKey(key); setSortAsc(false); }
-  };
+  const SECTIONS = [
+    { tag: 'Breakout'    as Tag, tokens: breakouts, color: '#a78bfa', label: 'BREAKOUT',    icon: '▲', desc: 'Social attention + rising on-chain activity' },
+    { tag: 'Stealth Gem' as Tag, tokens: stealths,  color: '#34d399', label: 'STEALTH GEM', icon: '◆', desc: 'Quiet accumulation — low attention, real capital' },
+    { tag: 'Fake Hype'   as Tag, tokens: fakeHypes,  color: '#f87171', label: 'FAKE HYPE',   icon: '✕', desc: 'High social noise, zero on-chain conviction' },
+  ];
+
+  const displaySections = activeTag === 'All'
+    ? SECTIONS
+    : SECTIONS.filter(s => s.tag === activeTag);
 
   return (
     <div>
-      {/* Signal summary bar */}
-      <div className="border-b border-white/10 px-6 py-3 flex gap-6 text-xs">
-        <span className="text-emerald-400">▲ {counts.Breakout} BREAKOUT</span>
-        <span className="text-yellow-400">◆ {counts['Stealth Gem']} STEALTH GEM</span>
-        <span className="text-red-400">✕ {counts['Fake Hype']} FAKE HYPE</span>
-        <span className="text-white/30">· {counts['No Signal']} NO SIGNAL</span>
+      {/* Stats bar */}
+      <div style={{
+        borderBottom: '1px solid rgba(139,92,246,0.1)',
+        padding: '10px 32px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '32px',
+        background: 'rgba(139,92,246,0.03)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: blink ? '#a78bfa' : 'transparent',
+            border: '1px solid #a78bfa',
+            display: 'inline-block',
+            transition: 'background 0.3s',
+            boxShadow: blink ? '0 0 6px #a78bfa' : 'none',
+          }} />
+          <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px', letterSpacing: '0.12em' }}>LIVE</span>
+        </div>
+        {[
+          { tag: 'Breakout', color: '#a78bfa', icon: '▲' },
+          { tag: 'Stealth Gem', color: '#34d399', icon: '◆' },
+          { tag: 'Fake Hype', color: '#f87171', icon: '✕' },
+        ].map(({ tag, color, icon }) => (
+          <span key={tag} style={{ color, fontSize: '11px', letterSpacing: '0.08em', fontWeight: 600 }}>
+            {icon} {counts[tag as keyof typeof counts]} {tag.toUpperCase()}
+          </span>
+        ))}
+        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', marginLeft: 'auto' }}>
+          {tokens.length} tokens analyzed
+        </span>
       </div>
 
-      {/* Filter + Sort bar */}
-      <div className="border-b border-white/10 px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
-        {/* Tag filters */}
-        <div className="flex gap-2 flex-wrap">
-          {(['All', 'Breakout', 'Stealth Gem', 'Fake Hype'] as Tag[]).map(tag => (
-            <button
-              key={tag}
-              onClick={() => setActiveTag(tag)}
-              className={
-                "text-xs px-3 py-1 rounded border transition-colors " +
-                (activeTag === tag
-                  ? (TAG_STYLES[tag] + " bg-white/5")
-                  : "text-white/30 border-white/10 hover:border-white/20")
-              }
-            >
-              {tag}
+      {/* Filter tabs */}
+      <div style={{
+        borderBottom: '1px solid rgba(139,92,246,0.1)',
+        padding: '0 32px',
+        display: 'flex',
+        gap: '0',
+      }}>
+        {(['All', 'Breakout', 'Stealth Gem', 'Fake Hype'] as Tag[]).map(tag => {
+          const colors: Record<string, string> = {
+            'All': '#a78bfa', 'Breakout': '#a78bfa', 'Stealth Gem': '#34d399', 'Fake Hype': '#f87171'
+          };
+          const isActive = activeTag === tag;
+          return (
+            <button key={tag} onClick={() => setActiveTag(tag)} style={{
+              padding: '14px 20px',
+              border: 'none',
+              borderBottom: isActive ? '2px solid ' + colors[tag] : '2px solid transparent',
+              background: 'transparent',
+              color: isActive ? colors[tag] : 'rgba(255,255,255,0.3)',
+              fontSize: '11px',
+              letterSpacing: '0.08em',
+              fontWeight: isActive ? 700 : 400,
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}>
+              {tag.toUpperCase()}
             </button>
-          ))}
-        </div>
-
-        {/* Sort controls */}
-        <div className="flex gap-2 items-center text-xs text-white/40">
-          <span>Sort:</span>
-          {([
-            ['potentialScore', 'Score'],
-            ['lifetimeFeesSol', 'Fees'],
-            ['riskScore', 'Risk'],
-          ] as [SortKey, string][]).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => toggleSort(key)}
-              className={
-                "px-2 py-1 rounded border transition-colors " +
-                (sortKey === key
-                  ? "text-white border-white/30"
-                  : "border-white/10 hover:border-white/20")
-              }
-            >
-              {label} {sortKey === key ? (sortAsc ? '↑' : '↓') : ''}
-            </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      {/* Token grid */}
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        {filtered.length === 0 ? (
-          <div className="text-center text-white/30 py-20">No tokens match this filter</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filtered.map(t => <TokenCard key={t.mint} token={t} />)}
+      {/* Content */}
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px' }}>
+        {displaySections.map(section => (
+          section.tokens.length > 0 && (
+            <div key={section.tag} style={{ marginBottom: '40px' }}>
+              {/* Section header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: section.color, fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em' }}>
+                    {section.icon} {section.label}
+                  </span>
+                  <span style={{
+                    padding: '1px 7px', borderRadius: '20px',
+                    background: section.color + '15',
+                    border: '1px solid ' + section.color + '30',
+                    color: section.color,
+                    fontSize: '10px', fontWeight: 600,
+                  }}>
+                    {section.tokens.length}
+                  </span>
+                </div>
+                <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, ' + section.color + '30, transparent)' }} />
+                <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '10px' }}>{section.desc}</span>
+              </div>
+
+              {/* Token grid — max 6 per section */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: '10px',
+              }}>
+                {section.tokens.slice(0, activeTag === 'All' ? 6 : 100).map(t => (
+                  <TokenCard key={t.mint} token={t} />
+                ))}
+              </div>
+
+              {/* Show more */}
+              {activeTag === 'All' && section.tokens.length > 6 && (
+                <button onClick={() => setActiveTag(section.tag)} style={{
+                  marginTop: '12px',
+                  padding: '8px 16px',
+                  background: 'transparent',
+                  border: '1px solid ' + section.color + '30',
+                  borderRadius: '8px',
+                  color: section.color,
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  letterSpacing: '0.05em',
+                }}>
+                  View all {section.tokens.length} {section.label} tokens →
+                </button>
+              )}
+            </div>
+          )
+        ))}
+
+        {displaySections.every(s => s.tokens.length === 0) && (
+          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.2)', padding: '80px', fontSize: '13px' }}>
+            No tokens match this filter
           </div>
         )}
       </div>

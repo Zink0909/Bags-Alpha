@@ -28,7 +28,7 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
         getLifetimeFees(mint),
         getClaimStats(mint),
         getPool(mint),
-        token.symbol ? getTwitterSignal(token.symbol) : Promise.resolve(null),
+        token.twitter && token.symbol ? getTwitterSignal(token.symbol) : Promise.resolve(null),
       ]);
 
       const lifetimeFeesSol = feesRaw.status === 'fulfilled'
@@ -52,13 +52,18 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
       const twitterSignal = twitterRaw.status === 'fulfilled' && twitterRaw.value
         ? twitterRaw.value
         : null;
+
       const attentionScore = twitterSignal
         ? twitterSignal.attentionScore
         : placeholderAttentionScore(token.twitter || '');
+
+      const qualityScore = twitterSignal?.qualityScore || 0;
+      const tweetCount = twitterSignal?.tweetCount || 0;
+
       const conversionScore = feesToConversionScore(lifetimeFeesSol);
       const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
       const riskScore = computeRiskScore(isGraduated, lifetimeFeesSol, !!(token.twitter));
-      const tag = computeTag(attentionScore, conversionScore);
+      const tag = computeTag(attentionScore, conversionScore, momentumScore);
 
       return {
         mint,
@@ -73,6 +78,8 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
         isGraduated,
         creatorTwitter: token.twitter || '',
         attentionScore,
+        qualityScore,
+        tweetCount,
         conversionScore,
         momentumScore,
         potentialScore,
@@ -93,10 +100,8 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
   const allPools = await getAllPools();
   if (!allPools || !Array.isArray(allPools)) return [];
 
-  // 随机取一批，避免每次都是同样的 pool
   const shuffled = allPools.sort(() => Math.random() - 0.5).slice(0, 200);
 
-  // 批量查 fees，过滤甜蜜点
   const withFees = await Promise.allSettled(
     shuffled.map(async (pool: any) => {
       const feesRaw = await getLifetimeFees(pool.tokenMint);
@@ -112,14 +117,12 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
     .sort((a, b) => b.sol - a.sol)
     .slice(0, limit);
 
-  // 补全 metadata
   const results = await Promise.allSettled(
     sweetspot.map(async (p: any) => {
-      const [meta, creatorsRaw, claimRaw, twitterReady] = await Promise.allSettled([
+      const [meta, creatorsRaw, claimRaw] = await Promise.allSettled([
         getAssetMetadata(p.mint),
         getCreators(p.mint),
         getClaimStats(p.mint),
-        Promise.resolve(null),
       ]);
 
       const metadata = meta.status === 'fulfilled' ? meta.value : { name: '', symbol: '', image: '' };
@@ -139,7 +142,7 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
         : 0;
       const momentumScore = Math.round(unclaimedRatio * 100);
 
-      const twitterSignal = metadata.symbol
+      const twitterSignal = metadata.symbol && twitterUrl
         ? await getTwitterSignal(metadata.symbol).catch(() => null)
         : null;
 
@@ -147,10 +150,13 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
         ? twitterSignal.attentionScore
         : placeholderAttentionScore(twitterUrl);
 
+      const qualityScore = twitterSignal?.qualityScore || 0;
+      const tweetCount = twitterSignal?.tweetCount || 0;
+
       const conversionScore = feesToConversionScore(p.sol);
       const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
       const riskScore = computeRiskScore(p.isGraduated, p.sol, !!twitterUrl);
-      const tag = computeTag(attentionScore, conversionScore);
+      const tag = computeTag(attentionScore, conversionScore, momentumScore);
 
       return {
         mint: p.mint,
@@ -165,6 +171,8 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
         isGraduated: p.isGraduated,
         creatorTwitter: twitterUrl,
         attentionScore,
+        qualityScore,
+        tweetCount,
         conversionScore,
         momentumScore,
         potentialScore,

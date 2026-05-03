@@ -1,7 +1,8 @@
-import { getLifetimeFees, getCreators, getClaimStats, getPool, getQuote, SOL_MINT } from '@/lib/bags';
+import { getLifetimeFees, getCreators, getClaimStats, getPool, getQuote, SOL_MINT, getFeed } from '@/lib/bags';
 import { feesToConversionScore, placeholderAttentionScore, computeRiskScore, computeTag, computePotentialScore } from '@/lib/score';
+import { getTwitterSignal } from '@/lib/twitter';
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 export default async function TokenDetail({ params }: { params: Promise<{ mint: string }> }) {
   const { mint } = await params;
@@ -35,13 +36,24 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
     ? 'https://x.com/' + mainCreator.twitterUsername
     : '';
 
-  const attentionScore = placeholderAttentionScore(twitterUrl);
+  // Get real Twitter signal for detail page
+  const feed = await getFeed().catch(() => []);
+  const feedToken = Array.isArray(feed) ? feed.find((t: any) => t.tokenMint === mint) : null;
+  const symbol = feedToken?.symbol || mainCreator?.providerUsername || '';
+  const twitterSignal = symbol ? await getTwitterSignal(symbol).catch(() => null) : null;
+
+  const attentionScore = twitterSignal
+    ? twitterSignal.attentionScore
+    : placeholderAttentionScore(twitterUrl);
+  const qualityScore = twitterSignal?.qualityScore || 0;
+  const tweetCount = twitterSignal?.tweetCount || 0;
+
   const conversionScore = feesToConversionScore(lifetimeFeesSol);
   const unclaimedRatio = lifetimeFeesSol > 0 ? Math.min((lifetimeFeesSol - totalClaimed) / lifetimeFeesSol, 1) : 0;
   const momentumScore = Math.round(unclaimedRatio * 100);
   const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
   const riskScore = computeRiskScore(isGraduated, lifetimeFeesSol, !!twitterUrl);
-  const tag = computeTag(attentionScore, conversionScore);
+  const tag = computeTag(attentionScore, conversionScore, momentumScore);
 
   const TAG_COLORS: Record<string, string> = {
     'Breakout': 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10',
@@ -53,6 +65,9 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
 
   const priceImpact = quote?.priceImpactPct ? parseFloat(quote.priceImpactPct) : null;
   const outAmount = quote?.outAmount ? (Number(BigInt(quote.outAmount)) / 1e6).toFixed(2) : null;
+
+  const qualityLabel = qualityScore >= 70 ? 'High Quality' : qualityScore >= 40 ? 'Mixed' : qualityScore > 0 ? 'Low Quality / Spam' : 'No Data';
+  const qualityColor = qualityScore >= 70 ? 'text-emerald-400' : qualityScore >= 40 ? 'text-yellow-400' : qualityScore > 0 ? 'text-red-400' : 'text-white/30';
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white font-mono">
@@ -98,6 +113,41 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
             <span className="text-white/40">Risk Score</span>
             <span className={riskScore > 70 ? 'text-red-400 font-bold' : 'text-white/60'}>{riskScore} / 100</span>
           </div>
+        </div>
+
+        {/* Social Signal Quality - Claude NLP */}
+        <div className="border border-white/10 rounded-lg p-5">
+          <div className="text-xs text-white/40 uppercase tracking-widest mb-4">Social Signal Analysis</div>
+          <div className="grid grid-cols-3 gap-4 text-center mb-4">
+            <div>
+              <div className="text-xs text-white/30 mb-1">Tweets Found</div>
+              <div className="text-lg font-bold text-white">{tweetCount}</div>
+              <div className="text-xs text-white/30">last 7 days</div>
+            </div>
+            <div>
+              <div className="text-xs text-white/30 mb-1">Avg Quality</div>
+              <div className={"text-lg font-bold " + qualityColor}>{qualityScore > 0 ? qualityScore + '/100' : 'N/A'}</div>
+              <div className="text-xs text-white/30">Claude NLP</div>
+            </div>
+            <div>
+              <div className="text-xs text-white/30 mb-1">Signal Type</div>
+              <div className={"text-sm font-bold " + qualityColor}>{qualityLabel}</div>
+              <div className="text-xs text-white/30">AI verdict</div>
+            </div>
+          </div>
+          {tweetCount === 0 && (
+            <div className="text-xs text-white/30 text-center">No recent tweets found for this token</div>
+          )}
+          {tweetCount > 0 && qualityScore < 40 && (
+            <div className="text-xs text-red-400/70 text-center mt-2">
+              Warning: Most tweets appear to be spam or low-quality shilling
+            </div>
+          )}
+          {tweetCount > 0 && qualityScore >= 70 && (
+            <div className="text-xs text-emerald-400/70 text-center mt-2">
+              Genuine community discussion detected
+            </div>
+          )}
         </div>
 
         <div className="border border-white/10 rounded-lg p-5">

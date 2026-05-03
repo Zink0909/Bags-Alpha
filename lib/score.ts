@@ -5,35 +5,39 @@ export interface TokenScore {
   twitter: string;
   image: string;
   status: string;
-  
+
   // raw data
   lifetimeFeesSol: number;
-  feeVelocity: number;       // fees claimed in last 24h (proxy for recent volume)
+  feeVelocity: number;
   hasPool: boolean;
   isGraduated: boolean;
   creatorTwitter: string;
-  
+
   // scores 0-100
-  attentionScore: number;    // from X mentions (placeholder for now)
-  conversionScore: number;   // from fees + velocity
-  momentumScore: number;     // rate of change
-  
-  potentialScore: number;    // weighted composite
-  riskScore: number;         // 0=low risk, 100=high risk
-  
+  attentionScore: number;
+  qualityScore: number;      // Claude NLP quality score 0-100
+  tweetCount: number;        // number of tweets found
+  conversionScore: number;
+  momentumScore: number;
+
+  potentialScore: number;
+  riskScore: number;
+
   // classification
   tag: 'Breakout' | 'Fake Hype' | 'Stealth Gem' | 'No Signal';
 }
 
 export function computeTag(
   attentionScore: number,
-  conversionScore: number
+  conversionScore: number,
+  momentumScore: number
 ): TokenScore['tag'] {
   const highAttention = attentionScore > 50;
   const hasConversion = conversionScore > 20;
+  const hasActivity = conversionScore > 5 || momentumScore > 10;
 
   if (highAttention && hasConversion) return 'Breakout';
-  if (highAttention && !hasConversion) return 'Fake Hype';
+  if (highAttention && !hasActivity) return 'Fake Hype';
   if (!highAttention && hasConversion) return 'Stealth Gem';
   return 'No Signal';
 }
@@ -51,28 +55,29 @@ export function computeRiskScore(
   lifetimeFeesSol: number,
   hasTwitter: boolean
 ): number {
-  let risk = 50; // baseline
-  if (!isGraduated) risk += 20;   // not graduated = thinner liquidity
-  if (lifetimeFeesSol < 0.01) risk += 20; // very low fees = low activity
-  if (!hasTwitter) risk += 10;    // no social presence
-  return Math.min(risk, 100);
+  let risk = 40; // lower baseline
+
+  if (!isGraduated) risk += 15;
+  if (lifetimeFeesSol < 0.01) risk += 25;
+  else if (lifetimeFeesSol < 0.1) risk += 10;
+  else if (lifetimeFeesSol > 1) risk -= 10; // high fees = lower risk
+  if (!hasTwitter) risk += 10;
+
+  return Math.min(Math.max(risk, 10), 100);
 }
 
 // Convert lifetime fees SOL to a 0-100 conversion score
-// Calibrated: 0.001 SOL = 5, 0.01 = 20, 0.1 = 50, 1 SOL = 80, 10+ SOL = 100
+// 0.001 SOL = 5, 0.01 = 20, 0.1 = 50, 1 SOL = 80, 10+ SOL = 100
 export function feesToConversionScore(sol: number): number {
   if (sol <= 0) return 0;
   const log = Math.log10(sol + 0.0001);
-  // log10(0.0001) = -4, log10(10) = 1
-  // map [-4, 1] -> [0, 100]
   const score = ((log + 4) / 5) * 100;
   return Math.min(Math.max(Math.round(score), 0), 100);
 }
 
-// Placeholder: attention score from Twitter handle existence
-// Will be replaced with real X API data
+// Conservative fallback when X API is unavailable
+// Does NOT give high scores — only real X data should give high attention
 export function placeholderAttentionScore(twitterUrl: string): number {
-  if (!twitterUrl) return 10;
-  if (twitterUrl.includes('/status/')) return 80;
-  return 60;
+  if (!twitterUrl) return 5;
+  return 25; // has twitter but no real data yet
 }
