@@ -83,6 +83,8 @@ export async function getLatestSnapshot() {
     potentialScore: row.potential_score || 0,
     riskScore: row.risk_score || 50,
     tag: row.tag || 'No Signal',
+    qualityScore: row.quality_score || 0,
+    tweetCount: row.tweet_count || 0,
   }));
 }
 
