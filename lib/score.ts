@@ -21,7 +21,7 @@ export interface TokenScore {
   creatorPostFrequency: number;  // posts per week
   conversionScore: number;
   momentumScore: number;
-
+  coordinationRisk: number;
   potentialScore: number;
   riskScore: number;
 

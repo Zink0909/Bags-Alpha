@@ -2,7 +2,7 @@ const BEARER = process.env.X_BEARER_TOKEN!;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY!;
 
 export interface TweetAnalysis {
-  quality: number;      // 0-10
+  quality: number;
   sentiment: 'positive' | 'negative' | 'neutral';
 }
 
@@ -12,18 +12,17 @@ export interface TwitterSignal {
   totalImpressions: number;
   attentionScore: number;
   qualityScore: number;
-  sentimentScore: number;    // -100 to +100
-  creatorPostFrequency: number; // posts per week
+  sentimentScore: number;
+  creatorPostFrequency: number;
+  coordinationRisk: number; // 0-100, higher = more coordinated/suspicious
 }
 
 async function analyzeTweetsWithClaude(tweets: string[]): Promise<TweetAnalysis[]> {
   if (!ANTHROPIC_KEY || tweets.length === 0) {
     return tweets.map(() => ({ quality: 5, sentiment: 'neutral' as const }));
   }
-
   try {
-    const prompt = 'Analyze these crypto token tweets. Reply ONLY with a JSON array, no markdown, no explanation. Each item: {"quality":0-10,"sentiment":"positive"|"negative"|"neutral"} where quality: 0=spam/bot/shill, 10=genuine insight with real analysis. sentiment: positive=bullish/supportive, negative=bearish/warning/dump, neutral=informational. Tweets: ' + JSON.stringify(tweets);
-
+    const prompt = 'Analyze these crypto token tweets. Reply ONLY with a JSON array, no markdown, no explanation. Each item: {"quality":0-10,"sentiment":"positive"|"negative"|"neutral"} where quality: 0=spam/bot/shill, 10=genuine insight. sentiment: positive=bullish/supportive, negative=bearish/warning/dump, neutral=informational. Tweets: ' + JSON.stringify(tweets);
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -37,12 +36,10 @@ async function analyzeTweetsWithClaude(tweets: string[]): Promise<TweetAnalysis[
         messages: [{ role: 'user', content: prompt }],
       }),
     });
-
     const data = await res.json();
     const text = data.content?.[0]?.text || '[]';
     const clean = text.replace(/```json|```/g, '').trim();
     const results = JSON.parse(clean);
-
     if (Array.isArray(results) && results.length === tweets.length) {
       return results.map((r: any) => ({
         quality: Math.min(Math.max(Number(r.quality) || 5, 0), 10),
@@ -57,44 +54,62 @@ async function analyzeTweetsWithClaude(tweets: string[]): Promise<TweetAnalysis[
 
 async function getCreatorPostFrequency(username: string): Promise<number> {
   if (!BEARER || !username) return 0;
-
   try {
-    // Get user ID first
     const userRes = await fetch(
       'https://api.twitter.com/2/users/by/username/' + username + '?user.fields=public_metrics',
-      {
-        headers: { 'Authorization': 'Bearer ' + BEARER },
-        next: { revalidate: 86400 }, // cache 24h
-      }
+      { headers: { 'Authorization': 'Bearer ' + BEARER }, next: { revalidate: 86400 } }
     );
     const userData = await userRes.json();
     if (!userData.data?.id) return 0;
-
     const userId = userData.data.id;
-
-    // Get recent tweets
     const tweetsRes = await fetch(
       'https://api.twitter.com/2/users/' + userId + '/tweets?max_results=10&tweet.fields=created_at',
-      {
-        headers: { 'Authorization': 'Bearer ' + BEARER },
-        next: { revalidate: 21600 },
-      }
+      { headers: { 'Authorization': 'Bearer ' + BEARER }, next: { revalidate: 21600 } }
     );
     const tweetsData = await tweetsRes.json();
     if (!tweetsData.data || tweetsData.data.length < 2) return 0;
-
-    // Calculate posts per week based on time span
     const times = tweetsData.data.map((t: any) => new Date(t.created_at).getTime());
     const newest = Math.max(...times);
     const oldest = Math.min(...times);
     const daySpan = (newest - oldest) / (1000 * 60 * 60 * 24);
-    if (daySpan === 0) return 7; // all today
-
-    const postsPerDay = tweetsData.data.length / daySpan;
-    return Math.round(postsPerDay * 7 * 10) / 10; // posts per week, 1 decimal
+    if (daySpan === 0) return 7;
+    return Math.round((tweetsData.data.length / daySpan) * 7 * 10) / 10;
   } catch {
     return 0;
   }
+}
+
+function detectCoordination(tweets: any[]): number {
+  if (tweets.length < 5) return 0;
+
+  // 1. Time concentration
+  const times = tweets.map(t => new Date(t.created_at || 0).getTime());
+  let maxInWindow = 0;
+  for (const t of times) {
+    const inWindow = times.filter(t2 => Math.abs(t2 - t) < 30 * 60 * 1000).length;
+    maxInWindow = Math.max(maxInWindow, inWindow);
+  }
+  const timeConcentration = maxInWindow / tweets.length;
+
+  // 2. Author repetition
+  const authors = tweets.map(t => t.author_id);
+  const uniqueAuthors = new Set(authors).size;
+  const authorRepetition = 1 - (uniqueAuthors / tweets.length);
+
+  // 3. Text similarity
+  const texts = tweets.map(t => t.text.toLowerCase().slice(0, 100));
+  let duplicatePairs = 0;
+  for (let i = 0; i < texts.length; i++) {
+    for (let j = i + 1; j < texts.length; j++) {
+      const shared = texts[i].split(' ').filter((w: string) => texts[j].includes(w)).length;
+      const similarity = shared / Math.max(texts[i].split(' ').length, 1);
+      if (similarity > 0.7) duplicatePairs++;
+    }
+  }
+  const textSimilarity = Math.min(duplicatePairs / tweets.length, 1);
+
+  const raw = timeConcentration * 0.4 + authorRepetition * 0.3 + textSimilarity * 0.3;
+  return Math.round(raw * 100);
 }
 
 export async function getTwitterSignal(
@@ -106,14 +121,11 @@ export async function getTwitterSignal(
   try {
     const query = encodeURIComponent('$' + symbol + ' -is:retweet lang:en');
     const url = 'https://api.twitter.com/2/tweets/search/recent?query=' + query
-      + '&max_results=10&tweet.fields=public_metrics,author_id'
+      + '&max_results=50&tweet.fields=public_metrics,author_id,created_at'
       + '&expansions=author_id&user.fields=public_metrics';
 
     const [tweetRes, creatorFreq] = await Promise.all([
-      fetch(url, {
-        headers: { 'Authorization': 'Bearer ' + BEARER },
-        next: { revalidate: 21600 },
-      }),
+      fetch(url, { headers: { 'Authorization': 'Bearer ' + BEARER }, next: { revalidate: 21600 } }),
       creatorUsername ? getCreatorPostFrequency(creatorUsername) : Promise.resolve(0),
     ]);
 
@@ -122,7 +134,6 @@ export async function getTwitterSignal(
 
     const tweets = data.data;
     const users = data.includes?.users || [];
-
     const userMap: Record<string, number> = {};
     for (const u of users) {
       userMap[u.id] = u.public_metrics?.followers_count || 0;
@@ -144,8 +155,8 @@ export async function getTwitterSignal(
     }
 
     const botRatio = tweetCount > 0 ? botCount / tweetCount : 0;
+    const coordinationRisk = detectCoordination(tweets);
 
-    // Claude NLP: quality + sentiment
     const tweetTexts = tweets.map((t: any) => t.text.slice(0, 200));
     const analyses = await analyzeTweetsWithClaude(tweetTexts);
 
@@ -153,14 +164,12 @@ export async function getTwitterSignal(
     const avgQuality = qualityScores.reduce((a, b) => a + b, 0) / qualityScores.length;
     const qualityScore = Math.round(avgQuality * 10);
 
-    // Sentiment score: -100 to +100
     const sentimentValues: number[] = analyses.map(a =>
       a.sentiment === 'positive' ? 1 : a.sentiment === 'negative' ? -1 : 0
     );
     const avgSentiment = sentimentValues.reduce((a, b) => a + b, 0) / sentimentValues.length;
     const sentimentScore = Math.round(avgSentiment * 100);
 
-    // KOL-weighted engagement with quality
     let weightedEngagement = 0;
     for (let i = 0; i < tweets.length; i++) {
       const tweet = tweets[i];
@@ -173,23 +182,15 @@ export async function getTwitterSignal(
     }
 
     const attentionScore = computeAttentionScore(
-      tweetCount,
-      weightedEngagement,
-      totalImpressions,
-      botRatio,
-      qualityScore,
-      sentimentScore,
-      creatorFreq
+      tweetCount, weightedEngagement, totalImpressions,
+      botRatio, qualityScore, sentimentScore, creatorFreq, coordinationRisk
     );
 
     return {
-      tweetCount,
-      totalEngagement,
-      totalImpressions,
-      attentionScore,
-      qualityScore,
-      sentimentScore,
+      tweetCount, totalEngagement, totalImpressions,
+      attentionScore, qualityScore, sentimentScore,
       creatorPostFrequency: creatorFreq,
+      coordinationRisk,
     };
   } catch {
     return defaultSignal();
@@ -198,13 +199,9 @@ export async function getTwitterSignal(
 
 function defaultSignal(): TwitterSignal {
   return {
-    tweetCount: 0,
-    totalEngagement: 0,
-    totalImpressions: 0,
-    attentionScore: 5,
-    qualityScore: 0,
-    sentimentScore: 0,
-    creatorPostFrequency: 0,
+    tweetCount: 0, totalEngagement: 0, totalImpressions: 0,
+    attentionScore: 5, qualityScore: 0, sentimentScore: 0,
+    creatorPostFrequency: 0, coordinationRisk: 0,
   };
 }
 
@@ -215,38 +212,32 @@ function computeAttentionScore(
   botRatio: number,
   qualityScore: number,
   sentimentScore: number,
-  creatorFrequency: number
+  creatorFrequency: number,
+  coordinationRisk: number
 ): number {
   if (count === 0) return 5;
 
   let score = 15;
-
-  // Tweet count (max +15)
   score += Math.min(count * 1.5, 15);
-
-  // KOL-weighted quality engagement (max +30)
   score += Math.min(weightedEngagement * 2, 30);
 
-  // Impression quality (max +12)
   const avgImpression = impressions / count;
   if (avgImpression > 1000) score += 12;
   else if (avgImpression > 100) score += 6;
   else if (avgImpression > 10) score += 3;
 
-  // Claude quality bonus (max +15)
   score += Math.round((qualityScore / 100) * 15);
-
-  // Sentiment bonus/penalty (max +-8)
   score += Math.round((sentimentScore / 100) * 8);
 
-  // Creator activity bonus (max +8)
   if (creatorFrequency > 10) score += 8;
   else if (creatorFrequency > 5) score += 5;
   else if (creatorFrequency > 1) score += 2;
 
-  // Bot penalty
   if (botRatio > 0.7) score -= 30;
   else if (botRatio > 0.4) score -= 15;
+
+  if (coordinationRisk > 70) score -= 20;
+  else if (coordinationRisk > 50) score -= 10;
 
   return Math.min(Math.max(Math.round(score), 5), 100);
 }
