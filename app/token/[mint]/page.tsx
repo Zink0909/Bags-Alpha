@@ -1,19 +1,78 @@
 import { getLifetimeFees, getCreators, getClaimStats, getPool, getQuote, SOL_MINT, getFeed } from '@/lib/bags';
 import { feesToConversionScore, placeholderAttentionScore, computeRiskScore, computeTag, computePotentialScore } from '@/lib/score';
 import { getTwitterSignal } from '@/lib/twitter';
+import { getFeeHistory } from '@/lib/supabase';
 
 export const revalidate = 3600;
+
+function FeeChart({ data }: { data: { lifetime_fees_sol: number; captured_at: string }[] }) {
+  if (data.length < 2) return null;
+
+  const W = 680, H = 80, PAD = 8;
+  const fees = data.map(d => d.lifetime_fees_sol);
+  const minF = Math.min(...fees);
+  const maxF = Math.max(...fees);
+  const range = maxF - minF || 1;
+
+  const points = data.map((d, i) => {
+    const x = PAD + (i / (data.length - 1)) * (W - PAD * 2);
+    const y = H - PAD - ((d.lifetime_fees_sol - minF) / range) * (H - PAD * 2);
+    return `${x},${y}`;
+  });
+
+  const polyline = points.join(' ');
+  const areaPoints = `${PAD},${H - PAD} ` + polyline + ` ${W - PAD},${H - PAD}`;
+
+  const feeGrowth = fees[fees.length - 1] - fees[0];
+  const growthColor = feeGrowth > 0 ? '#34d399' : '#f87171';
+
+  const firstTime = new Date(data[0].captured_at).toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const lastTime = new Date(data[data.length - 1].captured_at).toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div style={{ marginTop: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
+        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px', letterSpacing: '0.08em' }}>FEE GROWTH TREND</span>
+        <span style={{ color: growthColor, fontSize: '11px', fontWeight: 600 }}>
+          {feeGrowth >= 0 ? '+' : ''}{feeGrowth.toFixed(4)} SOL over {data.length} snapshots
+        </span>
+      </div>
+      <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '8px', padding: '8px', border: '1px solid rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '60px', display: 'block' }}>
+          <defs>
+            <linearGradient id="feeGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={growthColor} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={growthColor} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <polygon points={areaPoints} fill="url(#feeGrad)" />
+          <polyline points={polyline} fill="none" stroke={growthColor} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+          {data.map((d, i) => {
+            const x = PAD + (i / (data.length - 1)) * (W - PAD * 2);
+            const y = H - PAD - ((d.lifetime_fees_sol - minF) / range) * (H - PAD * 2);
+            return <circle key={i} cx={x} cy={y} r="2.5" fill={growthColor} opacity="0.8" />;
+          })}
+        </svg>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px' }}>{firstTime}</span>
+        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px' }}>{lastTime}</span>
+      </div>
+    </div>
+  );
+}
 
 export default async function TokenDetail({ params }: { params: Promise<{ mint: string }> }) {
   const { mint } = await params;
 
-  const [feesRaw, creatorsRaw, claimRaw, poolRaw, quoteRaw, feedRaw] = await Promise.allSettled([
+  const [feesRaw, creatorsRaw, claimRaw, poolRaw, quoteRaw, feedRaw, historyRaw] = await Promise.allSettled([
     getLifetimeFees(mint),
     getCreators(mint),
     getClaimStats(mint),
     getPool(mint),
     getQuote(SOL_MINT, mint, 1_000_000_000),
     getFeed(),
+    getFeeHistory(mint, 48),
   ]);
 
   const feesVal = feesRaw.status === 'fulfilled' ? feesRaw.value : null;
@@ -25,6 +84,7 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
   const pool = poolRaw.status === 'fulfilled' ? poolRaw.value : null;
   const quote = quoteRaw.status === 'fulfilled' ? quoteRaw.value : null;
   const feed = feedRaw.status === 'fulfilled' ? feedRaw.value : [];
+  const history = historyRaw.status === 'fulfilled' ? (historyRaw.value || []) : [];
 
   const feedToken = Array.isArray(feed) ? feed.find((t: any) => t.tokenMint === mint) : null;
   const tokenSymbol = feedToken?.symbol || '';
@@ -73,14 +133,11 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
 
   const qualityLabel = qualityScore >= 70 ? 'Genuine' : qualityScore >= 40 ? 'Mixed' : qualityScore > 0 ? 'Spam' : 'No Data';
   const qualityColor = qualityScore >= 70 ? '#34d399' : qualityScore >= 40 ? '#fbbf24' : qualityScore > 0 ? '#f87171' : '#6b7280';
-
   const sentimentLabel = sentimentScore > 20 ? 'Bullish' : sentimentScore < -20 ? 'Bearish' : 'Neutral';
   const sentimentColor = sentimentScore > 20 ? '#34d399' : sentimentScore < -20 ? '#f87171' : '#fbbf24';
   const sentimentIcon = sentimentScore > 20 ? '↑' : sentimentScore < -20 ? '↓' : '→';
-
   const coordLabel = coordinationRisk > 70 ? 'HIGH RISK' : coordinationRisk > 40 ? 'MODERATE' : 'LOW';
   const coordColor = coordinationRisk > 70 ? '#f87171' : coordinationRisk > 40 ? '#fbbf24' : '#34d399';
-
   const freqLabel = creatorPostFrequency > 10 ? 'Very Active' : creatorPostFrequency > 5 ? 'Active' : creatorPostFrequency > 1 ? 'Moderate' : creatorPostFrequency > 0 ? 'Low' : 'Unknown';
   const freqColor = creatorPostFrequency > 5 ? '#34d399' : creatorPostFrequency > 1 ? '#fbbf24' : '#6b7280';
 
@@ -102,18 +159,8 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(120,60,200,0.15) 0%, transparent 70%), #080612',
-      color: '#fff',
-    }}>
-      <header style={{
-        borderBottom: '1px solid rgba(139,92,246,0.12)',
-        padding: '0 32px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        height: '60px', background: 'rgba(8,6,18,0.8)', backdropFilter: 'blur(20px)',
-        position: 'sticky', top: 0, zIndex: 50,
-      }}>
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(120,60,200,0.15) 0%, transparent 70%), #080612', color: '#fff' }}>
+      <header style={{ borderBottom: '1px solid rgba(139,92,246,0.12)', padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '60px', background: 'rgba(8,6,18,0.8)', backdropFilter: 'blur(20px)', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <a href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: 28, height: 28, borderRadius: '8px', background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 800, color: '#fff' }}>α</div>
@@ -123,9 +170,7 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
           <span style={{ color: 'rgba(255,255,255,0.15)' }}>›</span>
           <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>{tokenSymbol || mint.slice(0, 8) + '...'}</span>
         </div>
-        <a href="/" style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(139,92,246,0.2)', background: 'rgba(139,92,246,0.08)', color: '#a78bfa', fontSize: '12px', textDecoration: 'none' }}>
-          ← Back to Radar
-        </a>
+        <a href="/" style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(139,92,246,0.2)', background: 'rgba(139,92,246,0.08)', color: '#a78bfa', fontSize: '12px', textDecoration: 'none' }}>← Back to Radar</a>
       </header>
 
       <main style={{ maxWidth: '760px', margin: '0 auto', padding: '40px 32px' }}>
@@ -183,8 +228,6 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
         <div style={cardStyle}>
           <h3 style={{ margin: '0 0 4px', fontSize: '11px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.12em' }}>SOCIAL SIGNAL ANALYSIS</h3>
           <p style={{ margin: '0 0 20px', color: 'rgba(255,255,255,0.2)', fontSize: '10px' }}>Powered by X API + Claude NLP · Coordination Detection</p>
-
-          {/* Row 1: tweet metrics */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
             <div style={metricBox}>
               <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '9px', letterSpacing: '0.08em', marginBottom: '6px' }}>TWEETS</div>
@@ -199,54 +242,28 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
             <div style={metricBox}>
               <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '9px', letterSpacing: '0.08em', marginBottom: '6px' }}>SENTIMENT</div>
               <div style={{ color: sentimentColor, fontSize: '20px', fontWeight: 700 }}>{sentimentIcon} {tweetCount > 0 ? sentimentLabel : 'N/A'}</div>
-              <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px', marginTop: '3px' }}>
-                {tweetCount > 0 ? (sentimentScore > 0 ? '+' : '') + sentimentScore + ' score' : 'no data'}
-              </div>
+              <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px', marginTop: '3px' }}>{tweetCount > 0 ? (sentimentScore > 0 ? '+' : '') + sentimentScore + ' score' : 'no data'}</div>
             </div>
           </div>
-
-          {/* Row 2: coordination + creator */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
             <div style={metricBox}>
               <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '9px', letterSpacing: '0.08em', marginBottom: '6px' }}>COORDINATION RISK</div>
               <div style={{ color: coordColor, fontSize: '16px', fontWeight: 700 }}>{coordLabel}</div>
-              <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px', marginTop: '3px' }}>
-                {coordinationRisk}% bot pattern detected
-              </div>
+              <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px', marginTop: '3px' }}>{coordinationRisk}% bot pattern detected</div>
             </div>
             <div style={metricBox}>
               <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '9px', letterSpacing: '0.08em', marginBottom: '6px' }}>CREATOR ACTIVITY</div>
               <div style={{ color: freqColor, fontSize: '16px', fontWeight: 700 }}>{freqLabel}</div>
-              <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px', marginTop: '3px' }}>
-                {creatorPostFrequency > 0 ? creatorPostFrequency + ' posts/week' : 'unknown'}
-              </div>
+              <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px', marginTop: '3px' }}>{creatorPostFrequency > 0 ? creatorPostFrequency + ' posts/week' : 'unknown'}</div>
             </div>
           </div>
-
-          {/* Warnings / verdicts */}
-          {tweetCount === 0 && (
-            <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(107,114,128,0.08)', border: '1px solid rgba(107,114,128,0.2)' }}>
-              <p style={{ color: '#9ca3af', fontSize: '12px', margin: 0 }}>No recent tweets found for ${tokenSymbol || 'this token'}</p>
-            </div>
-          )}
-          {tweetCount > 0 && coordinationRisk > 70 && (
-            <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', marginBottom: '8px' }}>
-              <p style={{ color: '#f87171', fontSize: '12px', margin: 0 }}>⚠ High coordination risk — same accounts posting similar content in short time windows. Likely bot campaign.</p>
-            </div>
-          )}
-          {tweetCount > 0 && qualityScore < 40 && qualityScore > 0 && (
-            <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', marginBottom: '8px' }}>
-              <p style={{ color: '#f87171', fontSize: '12px', margin: 0 }}>⚠ Most tweets appear to be spam or low-quality shilling — social signal unreliable</p>
-            </div>
-          )}
-          {tweetCount > 0 && qualityScore >= 70 && sentimentScore > 20 && (
-            <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
-              <p style={{ color: '#34d399', fontSize: '12px', margin: 0 }}>✓ Genuine bullish community discussion detected — strong social signal</p>
-            </div>
-          )}
+          {tweetCount === 0 && <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(107,114,128,0.08)', border: '1px solid rgba(107,114,128,0.2)' }}><p style={{ color: '#9ca3af', fontSize: '12px', margin: 0 }}>No recent tweets found for ${tokenSymbol || 'this token'}</p></div>}
+          {tweetCount > 0 && coordinationRisk > 70 && <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', marginBottom: '8px' }}><p style={{ color: '#f87171', fontSize: '12px', margin: 0 }}>Warning: High coordination risk — same accounts posting similar content in short time windows. Likely bot campaign.</p></div>}
+          {tweetCount > 0 && qualityScore < 40 && qualityScore > 0 && <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', marginBottom: '8px' }}><p style={{ color: '#f87171', fontSize: '12px', margin: 0 }}>Warning: Most tweets appear to be spam or low-quality shilling — social signal unreliable</p></div>}
+          {tweetCount > 0 && qualityScore >= 70 && sentimentScore > 20 && <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}><p style={{ color: '#34d399', fontSize: '12px', margin: 0 }}>Genuine bullish community discussion detected — strong social signal</p></div>}
         </div>
 
-        {/* On-chain activity */}
+        {/* On-chain activity + Fee trend chart */}
         <div style={cardStyle}>
           <h3 style={{ margin: '0 0 20px', fontSize: '11px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.12em' }}>ON-CHAIN ACTIVITY</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
@@ -262,11 +279,10 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          {history.length >= 2 && <FeeChart data={history} />}
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: history.length >= 2 ? '14px' : '0' }}>
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>Pool Status</span>
-            <span style={{ color: isGraduated ? '#34d399' : '#fbbf24', fontSize: '12px', fontWeight: 600 }}>
-              {isGraduated ? '✓ Graduated to DAMM v2' : '○ Pre-graduation (DBC)'}
-            </span>
+            <span style={{ color: isGraduated ? '#34d399' : '#fbbf24', fontSize: '12px', fontWeight: 600 }}>{isGraduated ? 'Graduated to DAMM v2' : 'Pre-graduation (DBC)'}</span>
           </div>
         </div>
 
@@ -304,12 +320,8 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
               </div>
               <div style={metricBox}>
                 <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px', marginBottom: '8px' }}>Price impact</div>
-                <div style={{ color: priceImpact && priceImpact > 5 ? '#f87171' : '#34d399', fontSize: '22px', fontWeight: 700 }}>
-                  {priceImpact ? priceImpact.toFixed(2) + '%' : 'N/A'}
-                </div>
-                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', marginTop: '4px' }}>
-                  {priceImpact && priceImpact > 5 ? 'High — caution' : 'Acceptable'}
-                </div>
+                <div style={{ color: priceImpact && priceImpact > 5 ? '#f87171' : '#34d399', fontSize: '22px', fontWeight: 700 }}>{priceImpact ? priceImpact.toFixed(2) + '%' : 'N/A'}</div>
+                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', marginTop: '4px' }}>{priceImpact && priceImpact > 5 ? 'High — caution' : 'Acceptable'}</div>
               </div>
             </div>
           ) : (
@@ -318,12 +330,7 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
         </div>
 
         {/* CTA */}
-        <a href={'https://bags.fm/' + mint} style={{
-          display: 'block', textAlign: 'center', padding: '14px', borderRadius: '12px',
-          background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(79,70,229,0.3))',
-          border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa', fontSize: '14px', fontWeight: 700,
-          textDecoration: 'none', boxShadow: '0 0 24px rgba(124,58,237,0.15)',
-        }}>
+        <a href={'https://bags.fm/' + mint} style={{ display: 'block', textAlign: 'center', padding: '14px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(79,70,229,0.3))', border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa', fontSize: '14px', fontWeight: 700, textDecoration: 'none', boxShadow: '0 0 24px rgba(124,58,237,0.15)' }}>
           Trade on Bags.fm →
         </a>
 
