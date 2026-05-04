@@ -152,3 +152,24 @@ export async function getHistoricalPattern(tag: string, scoreMin: number, scoreM
     hoursObserved: 9,
   };
 }
+
+export async function getCreatorTokens(username: string) {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from('token_snapshots')
+    .select('*')
+    .ilike('twitter', '%' + username + '%')
+    .order('captured_at', { ascending: false })
+    .limit(200);
+
+  if (error || !data) return [];
+
+  // deduplicate by mint, keep latest
+  const seen = new Set<string>();
+  return data.filter((row: any) => {
+    if (seen.has(row.mint)) return false;
+    seen.add(row.mint);
+    return true;
+  });
+}
