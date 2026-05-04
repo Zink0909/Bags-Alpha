@@ -2,7 +2,8 @@
 
 **Live:** https://bags-alpha-pied.vercel.app  
 **Built for:** The Bags Hackathon (DoraHacks, April–June 2026)  
-**Telegram Bot:** @BagsAlphaBot
+**Telegram Bot:** @BagsAlphaBot  
+**Chrome Extension:** Available in `/bags-alpha-extension`
 
 Bags Alpha identifies tokens on Bags.fm that are about to move — before the market prices them in. It fuses real-time social signals from X with on-chain fee data from the Bags API, runs each token through a multi-layer signal model powered by Claude NLP, and delivers alerts via Telegram.
 
@@ -70,15 +71,33 @@ Supabase
     │       → powers homepage via SSE (no timeout risk, real-time updates)
     │       → enables fee trend charts on token detail pages
     │       → historical pattern analysis (accumulating)
+    │       → Established tab (top tokens by lifetime fees)
     └── watchlist — user subscriptions (telegram_chat_id + creator_username)
 
 Telegram Bot (@BagsAlphaBot)
     ├── /api/alert    — pushes new Breakout tokens (score ≥ 70) automatically
     ├── /api/telegram — webhook for bot commands
     └── Commands: /top /watch /list /remove /help
+
+Chrome Extension
+    └── content script injects signal overlay on any Bags.fm token page
+        → shows tag, potential score, and dimension breakdown
+        → links back to full analysis on Bags Alpha
 ```
 
 **Stack:** Next.js 16, TypeScript, Tailwind, Supabase, Vercel
+
+---
+
+## Homepage
+
+The homepage has five views accessible via tabs:
+
+- **All** — signal-classified tokens grouped by Breakout, Stealth Gem, and Fake Hype
+- **Breakout** — tokens with high social attention and rising on-chain activity
+- **Stealth Gem** — tokens quietly accumulating capital with low social presence
+- **Fake Hype** — tokens with high social noise but zero on-chain conviction
+- **Established** — top tokens by lifetime fees from our analyzed universe, market-tested with proven trading history
 
 ---
 
@@ -105,6 +124,18 @@ Users can follow specific creators and receive Telegram alerts when their tokens
 
 ---
 
+## Creator Intelligence
+
+The Creator section (`/creator`) lets you search any Bags.fm creator by their X username and see all their tokens with current signal status. Each token links to its full detail page.
+
+---
+
+## Chrome Extension
+
+Install the extension from the `/bags-alpha-extension` folder (load unpacked in Chrome developer mode). Navigate to any token page on Bags.fm and a signal overlay will appear in the bottom-right corner showing the token's classification, potential score, and dimension breakdown. Click "View Full Analysis" to open the full detail page on Bags Alpha.
+
+---
+
 ## Historical Pattern Analysis
 
 Every token detail page shows a Historical Pattern block — given the token's current tag and score range, how have similar tokens performed historically in terms of fee growth? This is not a prediction, it is a probability distribution based on accumulated data.
@@ -117,7 +148,7 @@ The system has been collecting hourly snapshots since launch. As data accumulate
 
 The feed API returns the 100 most recently launched tokens. This misses older tokens that are now entering their growth phase.
 
-To solve this, Bags Alpha also samples from the full pool of 175,000+ tokens on the platform. It filters for tokens with lifetime fees in the 0.05–5 SOL range — the sweet spot where real trading is happening but the token hasn't already run. These tokens are enriched with metadata and scored through the same pipeline.
+To solve this, Bags Alpha also samples from the full pool of 175,000+ tokens on the platform. It filters for tokens with lifetime fees in the 0.05–5 SOL range — the sweet spot where real trading is happening but the token hasn't already run. Both batches are merged, deduplicated, and stored in Supabase each hour.
 
 ---
 
@@ -150,6 +181,7 @@ npm run dev
 
 API endpoints:
 - `GET /api/analyze` — full token analysis with scores
+- `GET /api/analyze-single?mint=` — single token analysis for Chrome extension
 - `GET /api/snapshot` — run analysis and persist to Supabase
 - `GET /api/alert` — push new Breakout tokens to Telegram
 - `GET /api/stream` — SSE stream for real-time homepage updates
@@ -163,10 +195,10 @@ API endpoints:
 ## Roadmap
 
 **Near-term**  
-Creator page (`/creator/[username]`) — all tokens from a creator with current signal status and signal history. KOL accuracy tracking — record which KOLs mentioned which tokens, measure whether conversion followed.
+KOL accuracy tracking — record which KOLs mentioned which tokens, measure whether conversion followed. Fee growth rate analysis — surface tokens where fee velocity is accelerating week over week.
 
 **Medium-term**  
-Bags ReStream API integration for real-time swap event processing. Chrome extension — show Bags Alpha signal scores directly on Bags.fm without leaving the page.
+Bags ReStream API integration for real-time swap event processing. Wallet age distribution — flag tokens where new wallets are suddenly buying in (bot signal).
 
 **Long-term**  
 Full predictive layer — once sufficient historical data is accumulated, surface probability distributions for signal patterns. For example: "47 tokens showed this exact profile — 68% saw fee growth within 6 hours, median delta +0.4 SOL."

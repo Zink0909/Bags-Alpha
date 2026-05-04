@@ -173,3 +173,51 @@ export async function getCreatorTokens(username: string) {
     return true;
   });
 }
+
+export async function getTopTokens(limit = 10) {
+  const supabase = getSupabase();
+
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from('token_snapshots')
+    .select('*')
+    .gte('captured_at', oneDayAgo)
+    .order('lifetime_fees_sol', { ascending: false })
+    .limit(500);
+
+  if (error || !data) return [];
+
+  // deduplicate by mint
+  const seen = new Set<string>();
+  const unique = data.filter((row: any) => {
+    if (seen.has(row.mint)) return false;
+    seen.add(row.mint);
+    return true;
+  });
+
+  return unique.slice(0, limit).map((row: any) => ({
+    mint: row.mint,
+    name: row.name || '',
+    symbol: row.symbol || '',
+    twitter: row.twitter || '',
+    image: row.image || '',
+    status: 'PRE_GRAD',
+    lifetimeFeesSol: row.lifetime_fees_sol || 0,
+    feeVelocity: 0,
+    hasPool: true,
+    isGraduated: false,
+    creatorTwitter: row.twitter || '',
+    attentionScore: row.attention_score || 5,
+    qualityScore: row.quality_score || 0,
+    tweetCount: row.tweet_count || 0,
+    sentimentScore: row.sentiment_score || 0,
+    coordinationRisk: row.coordination_risk || 0,
+    creatorPostFrequency: row.creator_post_frequency || 0,
+    conversionScore: row.conversion_score || 0,
+    momentumScore: row.momentum_score || 0,
+    potentialScore: row.potential_score || 0,
+    riskScore: row.risk_score || 50,
+    tag: row.tag || 'No Signal',
+  }));
+}
