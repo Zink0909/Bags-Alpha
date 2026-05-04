@@ -52,7 +52,7 @@ export default async function Home() {
             {[
               { label: 'Radar', active: true, href: '/' },
               { label: 'Watchlist', active: false, href: '/watchlist', soon: false },
-              { label: 'Creator', active: false, href: '/creator/search', soon: false },
+              { label: 'Creator', active: false, href: '/creator', soon: false },
             ].map(item => (
               <a key={item.label} href={item.href} style={{
                 padding: '6px 14px',

@@ -56,7 +56,7 @@ export default function WatchlistPage() {
             {[
               { label: 'Radar', href: '/', active: false },
               { label: 'Watchlist', href: '/watchlist', active: true },
-              { label: 'Creator', href: '#', active: false, soon: true },
+              { label: 'Creator', href: '/creator', active: false },
             ].map(item => (
               <Link key={item.label} href={item.href} style={{
                 padding: '6px 14px', borderRadius: '8px',
@@ -68,9 +68,6 @@ export default function WatchlistPage() {
                 border: item.active ? '1px solid rgba(167,139,250,0.2)' : '1px solid transparent',
               }}>
                 {item.label}
-                {item.soon && (
-                  <span style={{ fontSize: '8px', padding: '1px 5px', borderRadius: '4px', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.25)' }}>SOON</span>
-                )}
               </Link>
             ))}
           </nav>

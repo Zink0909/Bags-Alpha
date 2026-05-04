@@ -29,6 +29,10 @@ export default async function CreatorPage({ params }: { params: Promise<{ userna
       background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(120,60,200,0.15) 0%, transparent 70%), #080612',
       color: '#fff',
     }}>
+      <style>{`
+        .token-card { transition: all 0.15s; }
+        .token-card:hover { background: rgba(20,12,40,0.8) !important; transform: translateY(-1px); }
+      `}</style>
       {/* Header */}
       <header style={{
         borderBottom: '1px solid rgba(139,92,246,0.12)',
@@ -46,7 +50,7 @@ export default async function CreatorPage({ params }: { params: Promise<{ userna
             {[
               { label: 'Radar', href: '/', active: false },
               { label: 'Watchlist', href: '/watchlist', active: false },
-              { label: 'Creator', href: '#', active: true },
+              { label: 'Creator', href: '/creator', active: true },
             ].map(item => (
               <Link key={item.label} href={item.href} style={{
                 padding: '6px 14px', borderRadius: '8px',
@@ -122,16 +126,7 @@ export default async function CreatorPage({ params }: { params: Promise<{ userna
                       transition: 'all 0.15s',
                       cursor: 'pointer',
                     }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLDivElement).style.borderColor = cfg.color + '40';
-                      (e.currentTarget as HTMLDivElement).style.background = 'rgba(20,12,40,0.8)';
-                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(139,92,246,0.12)';
-                      (e.currentTarget as HTMLDivElement).style.background = 'rgba(15,10,30,0.6)';
-                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-                    }}>
+                    className="token-card">
                       {token.image ? (
                         <img src={token.image} alt={token.symbol} width={40} height={40} style={{ borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }} />
                       ) : (
