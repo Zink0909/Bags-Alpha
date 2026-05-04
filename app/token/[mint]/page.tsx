@@ -1,9 +1,9 @@
 import { getLifetimeFees, getCreators, getClaimStats, getPool, getQuote, SOL_MINT, getFeed } from '@/lib/bags';
 import { feesToConversionScore, placeholderAttentionScore, computeRiskScore, computeTag, computePotentialScore } from '@/lib/score';
 import { getTwitterSignal } from '@/lib/twitter';
-import { getFeeHistory } from '@/lib/supabase';
 import FeeChart from '@/components/FeeChart';
 import WatchButton from '@/components/WatchButton';
+import { getFeeHistory, getHistoricalPattern } from '@/lib/supabase';
 
 export const revalidate = 3600;
 
@@ -64,6 +64,10 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
   const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
   const riskScore = computeRiskScore(isGraduated, lifetimeFeesSol, !!twitterUrl);
   const tag = computeTag(attentionScore, conversionScore, momentumScore);
+
+  const scoreMin = Math.max(0, potentialScore - 15);
+  const scoreMax = Math.min(100, potentialScore + 15);
+  const pattern = await getHistoricalPattern(tag, scoreMin, scoreMax).catch(() => null);
 
   const TAG_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
     'Breakout':    { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', icon: '▲' },
@@ -208,7 +212,7 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
           {tweetCount > 0 && qualityScore >= 70 && sentimentScore > 20 && <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}><p style={{ color: '#34d399', fontSize: '12px', margin: 0 }}>Genuine bullish community discussion detected — strong social signal</p></div>}
         </div>
 
-        {/* On-chain activity + Fee trend chart */}
+        {/* On-chain activity */}
         <div style={cardStyle}>
           <h3 style={{ margin: '0 0 20px', fontSize: '11px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.12em' }}>ON-CHAIN ACTIVITY</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
@@ -229,6 +233,46 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>Pool Status</span>
             <span style={{ color: isGraduated ? '#34d399' : '#fbbf24', fontSize: '12px', fontWeight: 600 }}>{isGraduated ? 'Graduated to DAMM v2' : 'Pre-graduation (DBC)'}</span>
           </div>
+        </div>
+
+        {/* Historical Pattern */}
+        <div style={cardStyle}>
+          <h3 style={{ margin: '0 0 4px', fontSize: '11px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.12em' }}>HISTORICAL PATTERN</h3>
+          <p style={{ margin: '0 0 16px', color: 'rgba(255,255,255,0.2)', fontSize: '10px' }}>
+            Tokens with similar signal profile ({tag}, score {scoreMin}–{scoreMax}) — how did they perform?
+          </p>
+          {pattern && pattern.sampleSize >= 3 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+              <div style={metricBox}>
+                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '9px', letterSpacing: '0.08em', marginBottom: '6px' }}>SAMPLE SIZE</div>
+                <div style={{ color: '#f0eaff', fontSize: '20px', fontWeight: 700 }}>{pattern.sampleSize}</div>
+                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px', marginTop: '3px' }}>similar tokens</div>
+              </div>
+              <div style={metricBox}>
+                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '9px', letterSpacing: '0.08em', marginBottom: '6px' }}>FEE GROWTH RATE</div>
+                <div style={{ color: pattern.positiveRatePct >= 60 ? '#34d399' : pattern.positiveRatePct >= 40 ? '#fbbf24' : '#f87171', fontSize: '20px', fontWeight: 700 }}>
+                  {pattern.positiveRatePct}%
+                </div>
+                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px', marginTop: '3px' }}>showed fee increase</div>
+              </div>
+              <div style={metricBox}>
+                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '9px', letterSpacing: '0.08em', marginBottom: '6px' }}>MEDIAN DELTA</div>
+                <div style={{ color: pattern.medianFeeDelta >= 0 ? '#34d399' : '#f87171', fontSize: '20px', fontWeight: 700 }}>
+                  {pattern.medianFeeDelta >= 0 ? '+' : ''}{pattern.medianFeeDelta.toFixed(3)}
+                </div>
+                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '9px', marginTop: '3px' }}>SOL over {pattern.hoursObserved}h</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '20px', borderRadius: '10px', background: 'rgba(139,92,246,0.04)', border: '1px dashed rgba(139,92,246,0.15)', textAlign: 'center' }}>
+              <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', marginBottom: '6px' }}>
+                {pattern && pattern.sampleSize < 3 ? `Only ${pattern.sampleSize} similar tokens found — need more data` : 'Collecting data...'}
+              </div>
+              <div style={{ color: 'rgba(167,139,250,0.4)', fontSize: '11px' }}>
+                Historical pattern analysis will be available as more snapshots are collected. Currently tracking {pattern?.sampleSize || 0} similar tokens.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Creator */}

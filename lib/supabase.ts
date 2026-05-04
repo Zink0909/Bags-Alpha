@@ -105,3 +105,50 @@ export async function getFeeHistory(mint: string, hours = 24) {
   if (error) return [];
   return data || [];
 }
+
+export async function getHistoricalPattern(tag: string, scoreMin: number, scoreMax: number) {
+  const supabase = getSupabase();
+
+  // Get all snapshots for tokens with this tag and score range
+  const { data } = await supabase
+    .from('token_snapshots')
+    .select('mint, potential_score, lifetime_fees_sol, captured_at')
+    .eq('tag', tag)
+    .gte('potential_score', scoreMin)
+    .lte('potential_score', scoreMax)
+    .order('captured_at', { ascending: true });
+
+  if (!data || data.length === 0) return null;
+
+  // Group by mint, find pairs where we have before/after
+  const byMint: Record<string, any[]> = {};
+  for (const row of data) {
+    if (!byMint[row.mint]) byMint[row.mint] = [];
+    byMint[row.mint].push(row);
+  }
+
+  const deltas: number[] = [];
+  for (const rows of Object.values(byMint)) {
+    if (rows.length < 2) continue;
+    const first = rows[0].lifetime_fees_sol;
+    const last = rows[rows.length - 1].lifetime_fees_sol;
+    const delta = last - first;
+    deltas.push(delta);
+  }
+
+  if (deltas.length === 0) return null;
+
+  deltas.sort((a, b) => a - b);
+  const median = deltas[Math.floor(deltas.length / 2)];
+  const positive = deltas.filter(d => d > 0).length;
+  const positivePct = Math.round((positive / deltas.length) * 100);
+  const avgDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+
+  return {
+    sampleSize: deltas.length,
+    medianFeeDelta: median,
+    avgFeeDelta: avgDelta,
+    positiveRatePct: positivePct,
+    hoursObserved: 9,
+  };
+}
