@@ -67,17 +67,24 @@ X API (search/recent, user timeline)
 
 Supabase
     ├── token_snapshots — hourly snapshots of all token scores
-    │       → powers homepage (fast reads, no timeout risk)
-    │       → enables fee trend charts and historical analysis
+    │       → powers homepage via SSE (no timeout risk, real-time updates)
+    │       → enables fee trend charts on token detail pages
+    │       → historical pattern analysis (accumulating)
     └── watchlist — user subscriptions (telegram_chat_id + creator_username)
 
 Telegram Bot (@BagsAlphaBot)
-    ├── /api/alert   — pushes new Breakout tokens (score ≥ 70) automatically
+    ├── /api/alert    — pushes new Breakout tokens (score ≥ 70) automatically
     ├── /api/telegram — webhook for bot commands
     └── Commands: /top /watch /list /remove /help
 ```
 
 **Stack:** Next.js 16, TypeScript, Tailwind, Supabase, Vercel
+
+---
+
+## Real-time Updates
+
+The homepage uses Server-Sent Events (SSE) instead of polling. When the page loads, it opens a persistent connection to `/api/stream`, which immediately sends the latest snapshot data from Supabase. The connection stays open with a heartbeat, and reconnects automatically if dropped. The live indicator in the top bar reflects the actual connection state.
 
 ---
 
@@ -95,6 +102,14 @@ Users can follow specific creators and receive Telegram alerts when their tokens
 /remove wolflovesmelon  — unfollow
 /top                    — current Breakout tokens
 ```
+
+---
+
+## Historical Pattern Analysis
+
+Every token detail page shows a Historical Pattern block — given the token's current tag and score range, how have similar tokens performed historically in terms of fee growth? This is not a prediction, it is a probability distribution based on accumulated data.
+
+The system has been collecting hourly snapshots since launch. As data accumulates over weeks, this block will surface increasingly reliable historical baselines.
 
 ---
 
@@ -125,6 +140,8 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 TELEGRAM_CHAT_ID=your_chat_id
 SUPABASE_URL=your_supabase_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 ```bash
@@ -135,6 +152,7 @@ API endpoints:
 - `GET /api/analyze` — full token analysis with scores
 - `GET /api/snapshot` — run analysis and persist to Supabase
 - `GET /api/alert` — push new Breakout tokens to Telegram
+- `GET /api/stream` — SSE stream for real-time homepage updates
 - `POST /api/telegram` — Telegram bot webhook
 - `GET /api/watchlist?chatId=` — get watchlist for a chat ID
 - `POST /api/watchlist` — add to watchlist
@@ -145,13 +163,13 @@ API endpoints:
 ## Roadmap
 
 **Near-term**  
-Creator page (`/creator/[username]`) — all tokens from a creator with current signal status. KOL accuracy tracking — record which KOLs mentioned which tokens, measure whether conversion followed. Fee trend analysis — surface tokens where fee growth is accelerating.
+Creator page (`/creator/[username]`) — all tokens from a creator with current signal status and signal history. KOL accuracy tracking — record which KOLs mentioned which tokens, measure whether conversion followed.
 
 **Medium-term**  
-Historical probability distributions — given a token's current signal profile, show how similar patterns have played out historically. Server-Sent Events to replace 60-second polling. Bags ReStream API integration for real-time swap events.
+Bags ReStream API integration for real-time swap event processing. Chrome extension — show Bags Alpha signal scores directly on Bags.fm without leaving the page.
 
 **Long-term**  
-Chrome extension — show Bags Alpha signal scores directly on Bags.fm without leaving the page. User accounts with personalized ranking based on risk preference and trading history.
+Full predictive layer — once sufficient historical data is accumulated, surface probability distributions for signal patterns. For example: "47 tokens showed this exact profile — 68% saw fee growth within 6 hours, median delta +0.4 SOL."
 
 ---
 
