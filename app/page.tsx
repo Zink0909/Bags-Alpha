@@ -51,7 +51,7 @@ export default async function Home() {
           <nav style={{ display: 'flex', gap: '4px' }}>
             {[
               { label: 'Radar', active: true, href: '/' },
-              { label: 'Watchlist', active: false, href: '#', soon: true },
+              { label: 'Watchlist', active: false, href: '/watchlist', soon: true },
               { label: 'Creator', active: false, href: '#', soon: true },
             ].map(item => (
               <a key={item.label} href={item.href} style={{
