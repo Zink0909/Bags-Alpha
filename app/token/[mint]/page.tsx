@@ -3,6 +3,7 @@ import { feesToConversionScore, placeholderAttentionScore, computeRiskScore, com
 import { getTwitterSignal } from '@/lib/twitter';
 import { getFeeHistory } from '@/lib/supabase';
 import FeeChart from '@/components/FeeChart';
+import WatchButton from '@/components/WatchButton';
 
 export const revalidate = 3600;
 
@@ -249,6 +250,9 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
                 </div>
               </div>
             ))}
+            <div style={{ marginTop: '16px' }}>
+              <WatchButton creatorUsername={creatorUsername} tokenSymbol={tokenSymbol} />
+            </div>
           </div>
         )}
 

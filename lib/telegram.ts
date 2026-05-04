@@ -1,17 +1,16 @@
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-export async function sendTelegramAlert(message: string) {
-    console.log('TOKEN:', TOKEN ? 'found' : 'MISSING');
-    console.log('CHAT_ID:', CHAT_ID ? 'found' : 'MISSING');
-  if (!TOKEN || !CHAT_ID) return;
+export async function sendTelegramAlert(message: string, chatId?: string) {
+    const CHAT = chatId || CHAT_ID;
+  if (!TOKEN || !CHAT) return;
   try {
     const url = "https://api.telegram.org/bot" + TOKEN + "/sendMessage";
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: CHAT_ID,
+        chat_id: CHAT,
         text: message,
         parse_mode: "HTML",
         disable_web_page_preview: true,
