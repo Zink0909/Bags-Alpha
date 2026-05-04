@@ -47,7 +47,7 @@ export async function getLatestSnapshot() {
     .select('*')
     .gte('captured_at', oneDayAgo)
     .order('captured_at', { ascending: false })
-    .limit(500);
+    .limit(200);
 
   if (error) {
     console.error('Supabase read error:', error);
@@ -65,7 +65,7 @@ export async function getLatestSnapshot() {
   // sort by potential_score descending
   unique.sort((a: any, b: any) => (b.potential_score || 0) - (a.potential_score || 0));
 
-  return unique.slice(0, 100).map((row: any) => ({
+  return unique.slice(0, 200).map((row: any) => ({
     mint: row.mint,
     name: row.name || '',
     symbol: row.symbol || '',
