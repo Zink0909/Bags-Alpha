@@ -3,7 +3,8 @@
 **Live:** https://bags-alpha-pied.vercel.app  
 **Built for:** The Bags Hackathon (DoraHacks, April–June 2026)  
 **Telegram Bot:** @BagsAlphaBot  
-**Chrome Extension:** Available in `/bags-alpha-extension`
+**Chrome Extension:** Available in `/bags-alpha-extension`  
+**ReStream Service:** Deployed on Railway — 24/7 real-time token monitoring
 
 Bags Alpha identifies tokens on Bags.fm that are about to move — before the market prices them in. It fuses real-time social signals from X with on-chain fee data from the Bags API, runs each token through a multi-layer signal model powered by Claude NLP, and delivers alerts via Telegram.
 
@@ -52,6 +53,15 @@ Claude evaluates each tweet individually and returns both a quality score and a 
 ## Architecture
 
 ```
+Bags ReStream API (wss://restream.bags.fm)
+    |
+    └── Railway Service (24/7)
+            ├── subscribes to launchpad_launch:BAGS
+            ├── extracts mint address from each new launch event
+            ├── analyzes token signal within 3 seconds of launch
+            ├── saves to Supabase immediately
+            └── pushes Telegram alert if Breakout (score ≥ 60)
+
 Bags API (feed, fees, pools, creators, claims, quote)
     |
     ├── analyzeTokens()   — latest 100 tokens from feed
@@ -67,15 +77,16 @@ X API (search/recent, user timeline)
             └── creator post frequency
 
 Supabase
-    ├── token_snapshots — hourly snapshots of all token scores
-    │       → powers homepage via SSE (no timeout risk, real-time updates)
+    ├── token_snapshots — snapshots of all token scores
+    │       → powered by hourly cron + ReStream real-time events
+    │       → powers homepage via SSE
     │       → enables fee trend charts on token detail pages
     │       → historical pattern analysis (accumulating)
     │       → Established tab (top tokens by lifetime fees)
     └── watchlist — user subscriptions (telegram_chat_id + creator_username)
 
 Telegram Bot (@BagsAlphaBot)
-    ├── /api/alert    — pushes new Breakout tokens (score ≥ 70) automatically
+    ├── /api/alert    — pushes new Breakout tokens automatically
     ├── /api/telegram — webhook for bot commands
     └── Commands: /top /watch /list /remove /help
 
@@ -85,7 +96,17 @@ Chrome Extension
         → links back to full analysis on Bags Alpha
 ```
 
-**Stack:** Next.js 16, TypeScript, Tailwind, Supabase, Vercel
+**Stack:** Next.js 16, TypeScript, Tailwind, Supabase, Vercel, Railway
+
+---
+
+## ReStream Integration
+
+Bags Alpha is the first hackathon project to integrate with Bags ReStream API — a WebSocket endpoint that pushes every new token launch event in real time.
+
+A dedicated Node.js service runs on Railway, maintaining a persistent connection to `wss://restream.bags.fm`. When a new token is launched on Bags.fm, the service receives the event within seconds, extracts the mint address, runs the full signal analysis pipeline, and saves the result to Supabase. If the token scores as Breakout, a Telegram alert is pushed immediately — without waiting for the next hourly snapshot.
+
+This means new tokens appear in Bags Alpha within seconds of launch, not hours.
 
 ---
 
@@ -140,7 +161,7 @@ Install the extension from the `/bags-alpha-extension` folder (load unpacked in 
 
 Every token detail page shows a Historical Pattern block — given the token's current tag and score range, how have similar tokens performed historically in terms of fee growth? This is not a prediction, it is a probability distribution based on accumulated data.
 
-The system has been collecting hourly snapshots since launch. As data accumulates over weeks, this block will surface increasingly reliable historical baselines.
+The system has been collecting snapshots since launch. As data accumulates over weeks, this block will surface increasingly reliable historical baselines.
 
 ---
 
@@ -148,7 +169,7 @@ The system has been collecting hourly snapshots since launch. As data accumulate
 
 The feed API returns the 100 most recently launched tokens. This misses older tokens that are now entering their growth phase.
 
-To solve this, Bags Alpha also samples from the full pool of 175,000+ tokens on the platform. It filters for tokens with lifetime fees in the 0.05–5 SOL range — the sweet spot where real trading is happening but the token hasn't already run. Both batches are merged, deduplicated, and stored in Supabase each hour.
+To solve this, Bags Alpha also samples from the full pool of 175,000+ tokens on the platform. It filters for tokens with lifetime fees in the 0.05–5 SOL range — the sweet spot where real trading is happening but the token hasn't already run. Both batches are merged, deduplicated, and stored in Supabase each hour. New tokens discovered via ReStream are added immediately on launch.
 
 ---
 
@@ -179,9 +200,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 npm run dev
 ```
 
+**ReStream service** (`/bags-restream` repo): Deploy to Railway with the same environment variables plus `BAGS_ALPHA_URL=https://bags-alpha-pied.vercel.app`.
+
 API endpoints:
 - `GET /api/analyze` — full token analysis with scores
-- `GET /api/analyze-single?mint=` — single token analysis for Chrome extension
+- `GET /api/analyze-single?mint=` — single token analysis for Chrome extension and ReStream service
 - `GET /api/snapshot` — run analysis and persist to Supabase
 - `GET /api/alert` — push new Breakout tokens to Telegram
 - `GET /api/stream` — SSE stream for real-time homepage updates
@@ -198,7 +221,7 @@ API endpoints:
 KOL accuracy tracking — record which KOLs mentioned which tokens, measure whether conversion followed. Fee growth rate analysis — surface tokens where fee velocity is accelerating week over week.
 
 **Medium-term**  
-Bags ReStream API integration for real-time swap event processing. Wallet age distribution — flag tokens where new wallets are suddenly buying in (bot signal).
+Wallet age distribution — flag tokens where new wallets are suddenly buying in (bot signal). Swap event streaming — once ReStream adds swap events, track real-time trading volume per token.
 
 **Long-term**  
 Full predictive layer — once sufficient historical data is accumulated, surface probability distributions for signal patterns. For example: "47 tokens showed this exact profile — 68% saw fee growth within 6 hours, median delta +0.4 SOL."
