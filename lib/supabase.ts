@@ -205,7 +205,7 @@ export async function getCreatorTokens(username: string) {
   const { data, error } = await supabase
     .from('token_snapshots')
     .select('*')
-    .ilike('twitter', '%' + username + '%')
+    .ilike('twitter', '%/' + username)
     .order('captured_at', { ascending: false })
     .limit(200);
 

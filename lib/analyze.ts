@@ -1,6 +1,6 @@
 import {
   getFeed, getLifetimeFees, getClaimStats, getPool, getCreators,
-  getAssetMetadata, getAllPools
+  getAssetMetadata,
 } from './bags';
 import {
   computeTag, computePotentialScore, computeRiskScore,
@@ -98,103 +98,6 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
     .sort((a, b) => b.potentialScore - a.potentialScore);
 }
 
-export async function analyzePools(limit = 50): Promise<TokenScore[]> {
-  const allPools = await getAllPools();
-  if (!allPools || !Array.isArray(allPools)) return [];
-
-  const shuffled = allPools.slice();
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  shuffled.splice(200);
-
-  const withFees = await Promise.allSettled(
-    shuffled.map(async (pool: any) => {
-      const feesRaw = await getLifetimeFees(pool.tokenMint);
-      const sol = safeLamports(feesRaw);
-      if (sol < 0.05 || sol > 5) return null;
-      return { mint: pool.tokenMint, sol, isGraduated: !!pool.dammV2PoolKey };
-    })
-  );
-
-  const sweetspot = withFees
-    .filter(r => r.status === 'fulfilled' && r.value !== null)
-    .map(r => (r as PromiseFulfilledResult<any>).value)
-    .sort((a, b) => b.sol - a.sol)
-    .slice(0, limit);
-
-  const sweetspotMints = sweetspot.map((p: any) => p.mint);
-  const prevFeesMap = await getPreviousFeesMap(sweetspotMints).catch(() => ({} as Record<string, number>));
-
-  const results = await Promise.allSettled(
-    sweetspot.map(async (p: any) => {
-      const [meta, creatorsRaw] = await Promise.allSettled([
-        getAssetMetadata(p.mint),
-        getCreators(p.mint),
-      ]);
-
-      const metadata = meta.status === 'fulfilled' ? meta.value : { name: '', symbol: '', image: '' };
-      const creators = creatorsRaw.status === 'fulfilled' ? (creatorsRaw.value || []) : [];
-
-      const twitterUrl = creators[0]?.twitterUsername
-        ? 'https://x.com/' + creators[0].twitterUsername
-        : '';
-
-      const prevFees = prevFeesMap[p.mint] ?? null;
-      const feeGrowth = prevFees !== null ? Math.max(0, p.sol - prevFees) : null;
-      const momentumScore = feeGrowth !== null
-        ? feeGrowthToMomentumScore(feeGrowth)
-        : Math.min(50, Math.round((p.sol > 0 ? 0.5 : 0) * 100));
-
-      const twitterSignal = metadata.symbol && twitterUrl
-        ? await getTwitterSignal(metadata.symbol).catch(() => null)
-        : null;
-
-      const attentionScore = twitterSignal
-        ? twitterSignal.attentionScore
-        : placeholderAttentionScore(twitterUrl);
-
-      const qualityScore = twitterSignal?.qualityScore || 0;
-      const tweetCount = twitterSignal?.tweetCount || 0;
-
-      const conversionScore = feesToConversionScore(p.sol);
-      const riskScore = computeRiskScore(p.isGraduated, p.sol, !!twitterUrl);
-      const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore, riskScore);
-      const tag = computeTag(attentionScore, conversionScore, momentumScore);
-
-      return {
-        mint: p.mint,
-        name: metadata.name,
-        symbol: metadata.symbol,
-        twitter: twitterUrl,
-        image: metadata.image,
-        status: p.isGraduated ? 'GRADUATED' : 'PRE_GRAD',
-        lifetimeFeesSol: p.sol,
-        feeVelocity: feeGrowth ?? 0,
-        hasPool: true,
-        isGraduated: p.isGraduated,
-        creatorTwitter: twitterUrl,
-        attentionScore,
-        qualityScore,
-        tweetCount,
-        conversionScore,
-        momentumScore,
-        potentialScore,
-        riskScore,
-        tag,
-        sentimentScore: twitterSignal?.sentimentScore || 0,
-        creatorPostFrequency: twitterSignal?.creatorPostFrequency || 0,
-        coordinationRisk: twitterSignal?.coordinationRisk || 0,
-      } as TokenScore;
-    })
-  );
-
-  return results
-    .filter(r => r.status === 'fulfilled')
-    .map(r => (r as PromiseFulfilledResult<TokenScore>).value)
-    .sort((a, b) => b.potentialScore - a.potentialScore);
-}
 
 // Re-scores all tokens already in Supabase by re-fetching their fees.
 // Used by the snapshot cron instead of randomly sampling getAllPools.
