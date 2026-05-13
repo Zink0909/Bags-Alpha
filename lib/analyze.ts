@@ -101,7 +101,12 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
   const allPools = await getAllPools();
   if (!allPools || !Array.isArray(allPools)) return [];
 
-  const shuffled = allPools.sort(() => Math.random() - 0.5).slice(0, 200);
+  const shuffled = allPools.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  shuffled.splice(200);
 
   const withFees = await Promise.allSettled(
     shuffled.map(async (pool: any) => {
