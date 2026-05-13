@@ -17,23 +17,45 @@ export interface TwitterSignal {
   coordinationRisk: number; // 0-100, higher = more coordinated/suspicious
 }
 
+const TWEET_ANALYSIS_SYSTEM = `You analyze crypto token tweets for signal quality and sentiment.
+Reply ONLY with a valid JSON array — no markdown, no explanation, no extra text.
+Each element: {"quality": <0-10>, "sentiment": "<positive|negative|neutral>"}
+- quality 0: spam, bot, shill, copy-paste, zero insight
+- quality 10: genuine community discussion, original analysis, real insight
+- positive: bullish or supportive of the token
+- negative: bearish, warning, or dump signal
+- neutral: informational or no clear stance
+The array must have exactly the same number of elements as the input tweets.`;
+
 async function analyzeTweetsWithClaude(tweets: string[]): Promise<TweetAnalysis[]> {
   if (!ANTHROPIC_KEY || tweets.length === 0) {
     return tweets.map(() => ({ quality: 5, sentiment: 'neutral' as const }));
   }
   try {
-    const prompt = 'Analyze these crypto token tweets. Reply ONLY with a JSON array, no markdown, no explanation. Each item: {"quality":0-10,"sentiment":"positive"|"negative"|"neutral"} where quality: 0=spam/bot/shill, 10=genuine insight. sentiment: positive=bullish/supportive, negative=bearish/warning/dump, neutral=informational. Tweets: ' + JSON.stringify(tweets);
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': ANTHROPIC_KEY,
         'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'prompt-caching-2024-07-31',
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
+        system: [
+          {
+            type: 'text',
+            text: TWEET_ANALYSIS_SYSTEM,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
+        messages: [
+          {
+            role: 'user',
+            content: JSON.stringify(tweets),
+          },
+        ],
       }),
     });
     const data = await res.json();
@@ -119,7 +141,7 @@ export async function getTwitterSignal(
   if (!BEARER) return defaultSignal();
 
   try {
-    const query = encodeURIComponent('$' + symbol + ' -is:retweet lang:en');
+    const query = encodeURIComponent('$' + symbol + ' -is:retweet');
     const url = 'https://api.twitter.com/2/tweets/search/recent?query=' + query
       + '&max_results=50&tweet.fields=public_metrics,author_id,created_at'
       + '&expansions=author_id&user.fields=public_metrics';
