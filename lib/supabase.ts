@@ -179,6 +179,24 @@ export async function getHistoricalPattern(tag: string, scoreMin: number, scoreM
   };
 }
 
+export async function getTokenMetadata(mint: string): Promise<{ symbol: string; name: string; image: string; twitter: string } | null> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from('token_snapshots')
+    .select('symbol, name, image, twitter')
+    .eq('mint', mint)
+    .not('symbol', 'eq', '')
+    .order('captured_at', { ascending: false })
+    .limit(1);
+  if (!data || data.length === 0) return null;
+  return {
+    symbol: data[0].symbol || '',
+    name: data[0].name || '',
+    image: data[0].image || '',
+    twitter: data[0].twitter || '',
+  };
+}
+
 export async function getCreatorTokens(username: string) {
   const supabase = getSupabase();
 

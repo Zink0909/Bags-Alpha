@@ -3,22 +3,22 @@ import { feesToConversionScore, placeholderAttentionScore, computeRiskScore, com
 import { getTwitterSignal } from '@/lib/twitter';
 import FeeChart from '@/components/FeeChart';
 import WatchButton from '@/components/WatchButton';
-import { getFeeHistory, getHistoricalPattern, getPreviousFeesMap } from '@/lib/supabase';
+import { getFeeHistory, getHistoricalPattern, getPreviousFeesMap, getTokenMetadata } from '@/lib/supabase';
 
 export const revalidate = 3600;
 
 export default async function TokenDetail({ params }: { params: Promise<{ mint: string }> }) {
   const { mint } = await params;
 
-  const [feesRaw, creatorsRaw, claimRaw, poolRaw, quoteRaw, feedRaw, historyRaw, prevFeesMapRaw] = await Promise.allSettled([
+  const [feesRaw, creatorsRaw, claimRaw, poolRaw, quoteRaw, historyRaw, prevFeesMapRaw, cachedMeta] = await Promise.allSettled([
     getLifetimeFees(mint),
     getCreators(mint),
     getClaimStats(mint),
     getPool(mint),
     getQuote(SOL_MINT, mint, 1_000_000_000),
-    getFeed(),
     getFeeHistory(mint, 48),
     getPreviousFeesMap([mint]),
+    getTokenMetadata(mint),
   ]);
 
   const feesVal = feesRaw.status === 'fulfilled' ? feesRaw.value : null;
@@ -29,14 +29,22 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
   const claimData = claimRaw.status === 'fulfilled' ? (claimRaw.value || []) : [];
   const pool = poolRaw.status === 'fulfilled' ? poolRaw.value : null;
   const quote = quoteRaw.status === 'fulfilled' ? quoteRaw.value : null;
-  const feed = feedRaw.status === 'fulfilled' ? feedRaw.value : [];
   const history = historyRaw.status === 'fulfilled' ? (historyRaw.value || []) : [];
   const prevFeesMap = prevFeesMapRaw.status === 'fulfilled' ? prevFeesMapRaw.value : {};
+  const meta = cachedMeta.status === 'fulfilled' ? cachedMeta.value : null;
 
-  const feedToken = Array.isArray(feed) ? feed.find((t: any) => t.tokenMint === mint) : null;
-  const tokenSymbol = feedToken?.symbol || '';
-  const tokenName = feedToken?.name || '';
-  const tokenImage = feedToken?.image || '';
+  // Prefer Supabase metadata (works for any age token); fall back to live feed
+  let tokenSymbol = meta?.symbol || '';
+  let tokenName = meta?.name || '';
+  let tokenImage = meta?.image || '';
+
+  if (!tokenSymbol) {
+    const feedRaw = await getFeed().catch(() => []);
+    const feedToken = Array.isArray(feedRaw) ? feedRaw.find((t: any) => t.tokenMint === mint) : null;
+    tokenSymbol = feedToken?.symbol || '';
+    tokenName = feedToken?.name || '';
+    tokenImage = feedToken?.image || '';
+  }
 
   const totalClaimed = Array.isArray(claimData)
     ? claimData.reduce((sum: number, c: any) => {
