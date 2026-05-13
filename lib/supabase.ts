@@ -1,9 +1,12 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+let _client: SupabaseClient | null = null;
 
 export const getSupabase = () => {
-  const url = process.env.SUPABASE_URL!;
-  const key = process.env.SUPABASE_ANON_KEY!;
-  return createClient(url, key);
+  if (!_client) {
+    _client = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+  }
+  return _client;
 };
 
 export async function saveSnapshot(tokens: any[]) {
@@ -94,10 +97,12 @@ export async function getLatestSnapshot() {
 export async function getPreviousFeesMap(mints: string[]): Promise<Record<string, number>> {
   if (!mints.length) return {};
   const supabase = getSupabase();
+  const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase
     .from('token_snapshots')
     .select('mint, lifetime_fees_sol, captured_at')
     .in('mint', mints)
+    .gte('captured_at', since)
     .order('captured_at', { ascending: false });
   if (!data) return {};
   const map: Record<string, number> = {};
@@ -144,12 +149,16 @@ export async function getHistoricalPattern(tag: string, scoreMin: number, scoreM
   }
 
   const deltas: number[] = [];
+  const timeSpans: number[] = [];
+
   for (const rows of Object.values(byMint)) {
     if (rows.length < 2) continue;
     const first = rows[0].lifetime_fees_sol;
     const last = rows[rows.length - 1].lifetime_fees_sol;
-    const delta = last - first;
-    deltas.push(delta);
+    deltas.push(last - first);
+    const firstMs = new Date(rows[0].captured_at).getTime();
+    const lastMs = new Date(rows[rows.length - 1].captured_at).getTime();
+    timeSpans.push((lastMs - firstMs) / (1000 * 60 * 60));
   }
 
   if (deltas.length === 0) return null;
@@ -159,13 +168,14 @@ export async function getHistoricalPattern(tag: string, scoreMin: number, scoreM
   const positive = deltas.filter(d => d > 0).length;
   const positivePct = Math.round((positive / deltas.length) * 100);
   const avgDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+  const hoursObserved = Math.round(timeSpans.reduce((a, b) => a + b, 0) / timeSpans.length);
 
   return {
     sampleSize: deltas.length,
     medianFeeDelta: median,
     avgFeeDelta: avgDelta,
     positiveRatePct: positivePct,
-    hoursObserved: 9,
+    hoursObserved,
   };
 }
 
