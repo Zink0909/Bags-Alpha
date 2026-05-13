@@ -1,6 +1,6 @@
-import { getSupabase } from '@/lib/supabase';
-import { getLifetimeFees, getClaimStats } from '@/lib/bags';
-import { feesToConversionScore, computeTag, computePotentialScore, computeRiskScore, placeholderAttentionScore } from '@/lib/score';
+import { getSupabase, getPreviousFeesMap } from '@/lib/supabase';
+import { getLifetimeFees } from '@/lib/bags';
+import { feesToConversionScore, computeTag, computePotentialScore, computeRiskScore, feeGrowthToMomentumScore } from '@/lib/score';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -43,21 +43,21 @@ export async function GET(req: Request) {
       try { return Number(BigInt(val)) / 1e9; } catch { return 0; }
     }
 
-    const [feesRaw, claimRaw] = await Promise.allSettled([
+    const [feesRaw, prevFeesMapRaw] = await Promise.allSettled([
       getLifetimeFees(mint),
-      getClaimStats(mint),
+      getPreviousFeesMap([mint]),
     ]);
 
     const lifetimeFeesSol = feesRaw.status === 'fulfilled' ? safeLamports(feesRaw.value) : 0;
-    const claimData = claimRaw.status === 'fulfilled' ? claimRaw.value : [];
-    const totalClaimed = Array.isArray(claimData)
-      ? claimData.reduce((sum: number, c: any) => sum + safeLamports(c.totalClaimed), 0)
-      : 0;
+    const prevFeesMap = prevFeesMapRaw.status === 'fulfilled' ? prevFeesMapRaw.value : {};
+    const prevFees = prevFeesMap[mint] ?? null;
+    const feeGrowth = prevFees !== null ? Math.max(0, lifetimeFeesSol - prevFees) : null;
 
     const attentionScore = 10;
     const conversionScore = feesToConversionScore(lifetimeFeesSol);
-    const unclaimedRatio = lifetimeFeesSol > 0 ? Math.min((lifetimeFeesSol - totalClaimed) / lifetimeFeesSol, 1) : 0;
-    const momentumScore = Math.round(unclaimedRatio * 100);
+    const momentumScore = feeGrowth !== null
+      ? feeGrowthToMomentumScore(feeGrowth)
+      : Math.min(50, Math.round((lifetimeFeesSol > 0 ? 0.5 : 0) * 100));
     const riskScore = computeRiskScore(false, lifetimeFeesSol, false);
     const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore, riskScore);
     const tag = computeTag(attentionScore, conversionScore, momentumScore);

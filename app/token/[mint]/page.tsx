@@ -1,16 +1,16 @@
 import { getLifetimeFees, getCreators, getClaimStats, getPool, getQuote, SOL_MINT, getFeed } from '@/lib/bags';
-import { feesToConversionScore, placeholderAttentionScore, computeRiskScore, computeTag, computePotentialScore } from '@/lib/score';
+import { feesToConversionScore, placeholderAttentionScore, computeRiskScore, computeTag, computePotentialScore, feeGrowthToMomentumScore } from '@/lib/score';
 import { getTwitterSignal } from '@/lib/twitter';
 import FeeChart from '@/components/FeeChart';
 import WatchButton from '@/components/WatchButton';
-import { getFeeHistory, getHistoricalPattern } from '@/lib/supabase';
+import { getFeeHistory, getHistoricalPattern, getPreviousFeesMap } from '@/lib/supabase';
 
 export const revalidate = 3600;
 
 export default async function TokenDetail({ params }: { params: Promise<{ mint: string }> }) {
   const { mint } = await params;
 
-  const [feesRaw, creatorsRaw, claimRaw, poolRaw, quoteRaw, feedRaw, historyRaw] = await Promise.allSettled([
+  const [feesRaw, creatorsRaw, claimRaw, poolRaw, quoteRaw, feedRaw, historyRaw, prevFeesMapRaw] = await Promise.allSettled([
     getLifetimeFees(mint),
     getCreators(mint),
     getClaimStats(mint),
@@ -18,6 +18,7 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
     getQuote(SOL_MINT, mint, 1_000_000_000),
     getFeed(),
     getFeeHistory(mint, 48),
+    getPreviousFeesMap([mint]),
   ]);
 
   const feesVal = feesRaw.status === 'fulfilled' ? feesRaw.value : null;
@@ -30,6 +31,7 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
   const quote = quoteRaw.status === 'fulfilled' ? quoteRaw.value : null;
   const feed = feedRaw.status === 'fulfilled' ? feedRaw.value : [];
   const history = historyRaw.status === 'fulfilled' ? (historyRaw.value || []) : [];
+  const prevFeesMap = prevFeesMapRaw.status === 'fulfilled' ? prevFeesMapRaw.value : {};
 
   const feedToken = Array.isArray(feed) ? feed.find((t: any) => t.tokenMint === mint) : null;
   const tokenSymbol = feedToken?.symbol || '';
@@ -59,8 +61,11 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
   const creatorPostFrequency = twitterSignal?.creatorPostFrequency || 0;
 
   const conversionScore = feesToConversionScore(lifetimeFeesSol);
-  const unclaimedRatio = lifetimeFeesSol > 0 ? Math.min((lifetimeFeesSol - totalClaimed) / lifetimeFeesSol, 1) : 0;
-  const momentumScore = Math.round(unclaimedRatio * 100);
+  const prevFees = prevFeesMap[mint] ?? null;
+  const feeGrowth = prevFees !== null ? Math.max(0, lifetimeFeesSol - prevFees) : null;
+  const momentumScore = feeGrowth !== null
+    ? feeGrowthToMomentumScore(feeGrowth)
+    : Math.min(50, Math.round((lifetimeFeesSol > 0 ? 0.5 : 0) * 100));
   const riskScore = computeRiskScore(isGraduated, lifetimeFeesSol, !!twitterUrl);
   const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore, riskScore);
   const tag = computeTag(attentionScore, conversionScore, momentumScore);
@@ -149,9 +154,10 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
           <h3 style={{ margin: '0 0 20px', fontSize: '11px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.12em' }}>SCORE BREAKDOWN</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {[
-              { label: 'Attention', value: attentionScore, desc: 'Social signal strength from X', color: '#818cf8' },
-              { label: 'Conversion', value: conversionScore, desc: 'On-chain trading activity (fees)', color: '#34d399' },
-              { label: 'Momentum', value: momentumScore, desc: 'Fee velocity acceleration', color: '#fbbf24' },
+              { label: 'Attention',  value: attentionScore,      desc: 'Social signal strength from X · 25%',    color: '#818cf8' },
+              { label: 'Conversion', value: conversionScore,     desc: 'On-chain trading activity (fees) · 35%', color: '#34d399' },
+              { label: 'Momentum',   value: momentumScore,       desc: 'Fee growth since last snapshot · 25%',   color: '#fbbf24' },
+              { label: 'Safety',     value: 100 - riskScore,     desc: 'Low risk profile · 15%',                 color: '#67e8f9' },
             ].map(({ label, value, desc, color }) => (
               <div key={label}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
