@@ -86,6 +86,7 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
         sentimentScore: twitterSignal?.sentimentScore || 0,
         creatorPostFrequency: twitterSignal?.creatorPostFrequency || 0,
         coordinationRisk: twitterSignal?.coordinationRisk || 0,
+        capturedAt: new Date().toISOString(),
       } as TokenScore;
     })
   );

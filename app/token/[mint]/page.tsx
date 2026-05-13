@@ -5,7 +5,7 @@ import FeeChart from '@/components/FeeChart';
 import WatchButton from '@/components/WatchButton';
 import { getFeeHistory, getHistoricalPattern, getPreviousFeesMap, getTokenMetadata } from '@/lib/supabase';
 
-export const revalidate = 3600;
+export const revalidate = 60;
 
 export default async function TokenDetail({ params }: { params: Promise<{ mint: string }> }) {
   const { mint } = await params;
@@ -56,6 +56,18 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
   const mainCreator = creators[0];
   const twitterUrl = mainCreator?.twitterUsername ? 'https://x.com/' + mainCreator.twitterUsername : '';
   const creatorUsername = mainCreator?.twitterUsername || mainCreator?.providerUsername || '';
+
+  const capturedAt = meta?.capturedAt || '';
+  function timeAgo(iso: string): string {
+    if (!iso) return '';
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  }
 
   const twitterSignal = tokenSymbol
     ? await getTwitterSignal(tokenSymbol, creatorUsername).catch(() => null)
@@ -147,6 +159,9 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
           <div>
             <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 800, color: '#f0eaff', letterSpacing: '-0.01em' }}>{tokenSymbol || 'Unknown Token'}</h1>
             <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.35)', fontSize: '13px' }}>{tokenName}</p>
+            {capturedAt && (
+              <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>Updated {timeAgo(capturedAt)}</p>
+            )}
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
             <div style={{ padding: '4px 12px', borderRadius: '8px', background: tagCfg.bg, border: '1px solid ' + tagCfg.color + '30' }}>

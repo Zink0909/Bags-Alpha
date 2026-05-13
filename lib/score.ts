@@ -27,6 +27,8 @@ export interface TokenScore {
 
   // classification
   tag: 'Breakout' | 'Fake Hype' | 'Stealth Gem' | 'No Signal';
+
+  capturedAt?: string; // ISO timestamp of latest snapshot
 }
 
 export function computeTag(

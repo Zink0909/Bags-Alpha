@@ -3,6 +3,16 @@
 import Link from 'next/link';
 import { TokenScore } from '@/lib/score';
 
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 const TAG_CONFIG: Record<string, {
   label: string;
   icon: string;
@@ -127,12 +137,19 @@ export default function TokenCard({ token }: { token: TokenScore }) {
           <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '10px' }}>
             {token.lifetimeFeesSol.toFixed(4)} SOL fees
           </span>
-          <span style={{
-            fontSize: '10px', fontWeight: 600,
-            color: token.riskScore > 70 ? '#f87171' : token.riskScore > 50 ? '#fbbf24' : 'rgba(255,255,255,0.25)',
-          }}>
-            Risk {token.riskScore}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {token.capturedAt && (
+              <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: '10px' }}>
+                {timeAgo(token.capturedAt)}
+              </span>
+            )}
+            <span style={{
+              fontSize: '10px', fontWeight: 600,
+              color: token.riskScore > 70 ? '#f87171' : token.riskScore > 50 ? '#fbbf24' : 'rgba(255,255,255,0.25)',
+            }}>
+              Risk {token.riskScore}
+            </span>
+          </div>
         </div>
 
       </div>

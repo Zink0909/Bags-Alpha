@@ -91,6 +91,7 @@ export async function getLatestSnapshot() {
     sentimentScore: row.sentiment_score || 0,
     creatorPostFrequency: row.creator_post_frequency || 0,
     coordinationRisk: row.coordination_risk || 0,
+    capturedAt: row.captured_at || '',
   }));
 }
 
@@ -179,11 +180,11 @@ export async function getHistoricalPattern(tag: string, scoreMin: number, scoreM
   };
 }
 
-export async function getTokenMetadata(mint: string): Promise<{ symbol: string; name: string; image: string; twitter: string } | null> {
+export async function getTokenMetadata(mint: string): Promise<{ symbol: string; name: string; image: string; twitter: string; capturedAt: string } | null> {
   const supabase = getSupabase();
   const { data } = await supabase
     .from('token_snapshots')
-    .select('symbol, name, image, twitter')
+    .select('symbol, name, image, twitter, captured_at')
     .eq('mint', mint)
     .not('symbol', 'eq', '')
     .order('captured_at', { ascending: false })
@@ -194,6 +195,7 @@ export async function getTokenMetadata(mint: string): Promise<{ symbol: string; 
     name: data[0].name || '',
     image: data[0].image || '',
     twitter: data[0].twitter || '',
+    capturedAt: data[0].captured_at || '',
   };
 }
 
@@ -263,5 +265,6 @@ export async function getTopTokens(limit = 10) {
     potentialScore: row.potential_score || 0,
     riskScore: row.risk_score || 50,
     tag: row.tag || 'No Signal',
+    capturedAt: row.captured_at || '',
   }));
 }

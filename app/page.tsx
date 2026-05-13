@@ -1,11 +1,12 @@
 import RadarClient from '@/components/RadarClient';
 import { getLatestSnapshot, getTopTokens } from '@/lib/supabase';
 import { analyzeTokens } from '@/lib/analyze';
+import type { TokenScore } from '@/lib/score';
 
 export const revalidate = 60;
 
 export default async function Home() {
-  let tokens = await getLatestSnapshot();
+  let tokens: TokenScore[] = await getLatestSnapshot();
   if (tokens.length === 0) {
     tokens = await analyzeTokens(30);
   }
