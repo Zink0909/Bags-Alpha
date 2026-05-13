@@ -1,8 +1,13 @@
 import { getSupabase, getPreviousFeesMap } from '@/lib/supabase';
 import { getLifetimeFees } from '@/lib/bags';
 import { feesToConversionScore, computeTag, computePotentialScore, computeRiskScore, feeGrowthToMomentumScore } from '@/lib/score';
+import { checkRateLimit, getIP, rateLimitResponse } from '@/lib/ratelimit';
 
 export async function GET(req: Request) {
+  if (!checkRateLimit(`analyze-single:${getIP(req)}`, 60, 60_000)) {
+    return rateLimitResponse();
+  }
+
   const { searchParams } = new URL(req.url);
   const mint = searchParams.get('mint');
   if (!mint) return Response.json({ success: false, error: 'Missing mint' }, { status: 400 });

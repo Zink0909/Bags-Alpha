@@ -1,6 +1,10 @@
 import { getSupabase } from '@/lib/supabase';
+import { checkRateLimit, getIP, rateLimitResponse } from '@/lib/ratelimit';
 
 export async function POST(req: Request) {
+  if (!checkRateLimit(`watchlist:${getIP(req)}`, 30, 60_000)) {
+    return rateLimitResponse();
+  }
   try {
     const { creatorUsername, telegramChatId } = await req.json();
     if (!creatorUsername || !telegramChatId) {
@@ -21,6 +25,9 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  if (!checkRateLimit(`watchlist:${getIP(req)}`, 30, 60_000)) {
+    return rateLimitResponse();
+  }
   try {
     const { creatorUsername, telegramChatId } = await req.json();
     const supabase = getSupabase();
