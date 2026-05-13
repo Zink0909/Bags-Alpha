@@ -61,8 +61,8 @@ export default async function TokenDetail({ params }: { params: Promise<{ mint: 
   const conversionScore = feesToConversionScore(lifetimeFeesSol);
   const unclaimedRatio = lifetimeFeesSol > 0 ? Math.min((lifetimeFeesSol - totalClaimed) / lifetimeFeesSol, 1) : 0;
   const momentumScore = Math.round(unclaimedRatio * 100);
-  const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
   const riskScore = computeRiskScore(isGraduated, lifetimeFeesSol, !!twitterUrl);
+  const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore, riskScore);
   const tag = computeTag(attentionScore, conversionScore, momentumScore);
 
   const scoreMin = Math.max(0, potentialScore - 15);

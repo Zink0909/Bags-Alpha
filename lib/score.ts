@@ -47,9 +47,11 @@ export function computeTag(
 export function computePotentialScore(
   attention: number,
   conversion: number,
-  momentum: number
+  momentum: number,
+  riskScore: number,
 ): number {
-  return Math.round(0.3 * attention + 0.4 * conversion + 0.3 * momentum);
+  const safety = 100 - riskScore;
+  return Math.round(0.25 * attention + 0.35 * conversion + 0.25 * momentum + 0.15 * safety);
 }
 
 export function computeRiskScore(

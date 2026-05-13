@@ -59,8 +59,8 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
       const tweetCount = twitterSignal?.tweetCount || 0;
 
       const conversionScore = feesToConversionScore(lifetimeFeesSol);
-      const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
       const riskScore = computeRiskScore(isGraduated, lifetimeFeesSol, !!(token.twitter));
+      const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore, riskScore);
       const tag = computeTag(attentionScore, conversionScore, momentumScore);
 
       return {
@@ -153,8 +153,8 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
       const tweetCount = twitterSignal?.tweetCount || 0;
 
       const conversionScore = feesToConversionScore(p.sol);
-      const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore);
       const riskScore = computeRiskScore(p.isGraduated, p.sol, !!twitterUrl);
+      const potentialScore = computePotentialScore(attentionScore, conversionScore, momentumScore, riskScore);
       const tag = computeTag(attentionScore, conversionScore, momentumScore);
 
       return {
