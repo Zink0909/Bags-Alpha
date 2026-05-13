@@ -8,7 +8,7 @@ import {
   type TokenScore
 } from './score';
 import { getTwitterSignal } from './twitter';
-import { getPreviousFeesMap } from './supabase';
+import { getPreviousFeesMap, getLatestSnapshot } from './supabase';
 
 function safeLamports(val: any): number {
   if (!val || typeof val !== 'string') return 0;
@@ -193,4 +193,49 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
     .filter(r => r.status === 'fulfilled')
     .map(r => (r as PromiseFulfilledResult<TokenScore>).value)
     .sort((a, b) => b.potentialScore - a.potentialScore);
+}
+
+// Re-scores all tokens already in Supabase by re-fetching their fees.
+// Used by the snapshot cron instead of randomly sampling getAllPools.
+export async function refreshKnownTokens(): Promise<TokenScore[]> {
+  const known = await getLatestSnapshot();
+  if (!known.length) return [];
+
+  const mints = known.map(t => t.mint);
+  const prevFeesMap = await getPreviousFeesMap(mints).catch(() => ({} as Record<string, number>));
+
+  const results = await Promise.allSettled(
+    known.map(async (token) => {
+      const feesRaw = await getLifetimeFees(token.mint).catch(() => null);
+      const lifetimeFeesSol = feesRaw ? safeLamports(feesRaw) : token.lifetimeFeesSol;
+
+      const prevFees = prevFeesMap[token.mint] ?? null;
+      const feeGrowth = prevFees !== null ? Math.max(0, lifetimeFeesSol - prevFees) : null;
+      const momentumScore = feeGrowth !== null
+        ? feeGrowthToMomentumScore(feeGrowth)
+        : token.momentumScore;
+
+      const conversionScore = feesToConversionScore(lifetimeFeesSol);
+      const riskScore = computeRiskScore(token.isGraduated, lifetimeFeesSol, !!token.twitter);
+      const potentialScore = computePotentialScore(
+        token.attentionScore, conversionScore, momentumScore, riskScore,
+      );
+      const tag = computeTag(token.attentionScore, conversionScore, momentumScore);
+
+      return {
+        ...token,
+        lifetimeFeesSol,
+        feeVelocity: feeGrowth ?? 0,
+        conversionScore,
+        momentumScore,
+        potentialScore,
+        riskScore,
+        tag,
+      } as TokenScore;
+    })
+  );
+
+  return results
+    .filter(r => r.status === 'fulfilled')
+    .map(r => (r as PromiseFulfilledResult<TokenScore>).value);
 }
