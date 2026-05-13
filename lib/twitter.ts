@@ -119,13 +119,16 @@ function detectCoordination(tweets: any[]): number {
   const uniqueAuthors = new Set(authors).size;
   const authorRepetition = 1 - (uniqueAuthors / tweets.length);
 
-  // 3. Text similarity
+  // 3. Text similarity (ignore common words to avoid false positives)
+  const STOPWORDS = new Set(['the','a','an','is','in','on','at','to','of','and','or','for','with','this','that','it','be','are','was','i','my','we','you','he','she','they','do','not','have','has','but','so','as','by','from','up','out','its','if','no','can','all','get','just']);
   const texts = tweets.map(t => t.text.toLowerCase().slice(0, 100));
   let duplicatePairs = 0;
   for (let i = 0; i < texts.length; i++) {
+    const wordsI = texts[i].split(/\s+/).filter((w: string) => w.length > 3 && !STOPWORDS.has(w));
+    if (wordsI.length === 0) continue;
     for (let j = i + 1; j < texts.length; j++) {
-      const shared = texts[i].split(' ').filter((w: string) => texts[j].includes(w)).length;
-      const similarity = shared / Math.max(texts[i].split(' ').length, 1);
+      const shared = wordsI.filter((w: string) => texts[j].includes(w)).length;
+      const similarity = shared / wordsI.length;
       if (similarity > 0.7) duplicatePairs++;
     }
   }

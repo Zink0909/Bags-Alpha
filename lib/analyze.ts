@@ -27,10 +27,14 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
     tokens.map(async (token: any) => {
       const mint = token.tokenMint;
 
+      const creatorUsername = token.twitter
+        ? (token.twitter as string).match(/x\.com\/([^/\s]+)/)?.[1] || ''
+        : '';
+
       const [feesRaw, poolRaw, twitterRaw] = await Promise.allSettled([
         getLifetimeFees(mint),
         getPool(mint),
-        token.twitter && token.symbol ? getTwitterSignal(token.symbol) : Promise.resolve(null),
+        token.twitter && token.symbol ? getTwitterSignal(token.symbol, creatorUsername) : Promise.resolve(null),
       ]);
 
       const lifetimeFeesSol = feesRaw.status === 'fulfilled'
