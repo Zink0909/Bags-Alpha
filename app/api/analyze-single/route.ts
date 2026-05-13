@@ -84,6 +84,7 @@ export async function GET(req: Request) {
       headers: { 'Access-Control-Allow-Origin': '*' }
     });
   } catch (e: any) {
-    return Response.json({ success: false, error: e.message }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+    console.error('analyze-single error:', e);
+    return Response.json({ success: false, error: 'Internal server error' }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
   }
 }

@@ -2,7 +2,11 @@ const BASE = 'https://public-api-v2.bags.fm/api/v1';
 const KEY = process.env.BAGS_API_KEY!;
 
 const get = (path: string) =>
-  fetch(`${BASE}${path}`, { headers: { 'x-api-key': KEY }, next: { revalidate: 60 } })
+  fetch(`${BASE}${path}`, {
+    headers: { 'x-api-key': KEY },
+    next: { revalidate: 60 },
+    signal: AbortSignal.timeout(10_000),
+  })
     .then(r => r.json())
     .then(d => d.response);
 
@@ -39,7 +43,8 @@ export const getAssetMetadata = async (mint: string) => {
       method: 'getAsset',
       params: { id: mint }
     }),
-    next: { revalidate: 3600 }
+    next: { revalidate: 3600 },
+    signal: AbortSignal.timeout(10_000),
   });
   const data = await res.json();
   const content = data.result?.content;

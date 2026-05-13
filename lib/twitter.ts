@@ -40,6 +40,7 @@ async function analyzeTweetsWithClaude(tweets: string[]): Promise<TweetAnalysis[
         'anthropic-version': '2023-06-01',
         'anthropic-beta': 'prompt-caching-2024-07-31',
       },
+      signal: AbortSignal.timeout(30_000),
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
@@ -79,14 +80,14 @@ async function getCreatorPostFrequency(username: string): Promise<number> {
   try {
     const userRes = await fetch(
       'https://api.twitter.com/2/users/by/username/' + username + '?user.fields=public_metrics',
-      { headers: { 'Authorization': 'Bearer ' + BEARER }, next: { revalidate: 86400 } }
+      { headers: { 'Authorization': 'Bearer ' + BEARER }, next: { revalidate: 86400 }, signal: AbortSignal.timeout(10_000) }
     );
     const userData = await userRes.json();
     if (!userData.data?.id) return 0;
     const userId = userData.data.id;
     const tweetsRes = await fetch(
       'https://api.twitter.com/2/users/' + userId + '/tweets?max_results=10&tweet.fields=created_at',
-      { headers: { 'Authorization': 'Bearer ' + BEARER }, next: { revalidate: 21600 } }
+      { headers: { 'Authorization': 'Bearer ' + BEARER }, next: { revalidate: 21600 }, signal: AbortSignal.timeout(10_000) }
     );
     const tweetsData = await tweetsRes.json();
     if (!tweetsData.data || tweetsData.data.length < 2) return 0;
@@ -147,7 +148,7 @@ export async function getTwitterSignal(
       + '&expansions=author_id&user.fields=public_metrics';
 
     const [tweetRes, creatorFreq] = await Promise.all([
-      fetch(url, { headers: { 'Authorization': 'Bearer ' + BEARER }, next: { revalidate: 21600 } }),
+      fetch(url, { headers: { 'Authorization': 'Bearer ' + BEARER }, next: { revalidate: 21600 }, signal: AbortSignal.timeout(10_000) }),
       creatorUsername ? getCreatorPostFrequency(creatorUsername) : Promise.resolve(0),
     ]);
 

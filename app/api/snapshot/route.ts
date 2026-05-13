@@ -28,6 +28,7 @@ export async function GET(req: Request) {
       timestamp: new Date().toISOString(),
     });
   } catch (e: any) {
-    return Response.json({ success: false, error: e.message }, { status: 500 });
+    console.error('snapshot error:', e);
+    return Response.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }

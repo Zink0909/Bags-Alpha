@@ -20,7 +20,8 @@ export async function POST(req: Request) {
     }
     return Response.json({ success: true });
   } catch (e: any) {
-    return Response.json({ success: false, error: e.message }, { status: 500 });
+    console.error('watchlist error:', e);
+    return Response.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -37,7 +38,8 @@ export async function DELETE(req: Request) {
       .eq('creator_username', creatorUsername);
     return Response.json({ success: true });
   } catch (e: any) {
-    return Response.json({ success: false, error: e.message }, { status: 500 });
+    console.error('watchlist error:', e);
+    return Response.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -53,6 +55,7 @@ export async function GET(req: Request) {
       .order('created_at', { ascending: false });
     return Response.json({ success: true, data: data || [] });
   } catch (e: any) {
-    return Response.json({ success: false, error: e.message }, { status: 500 });
+    console.error('watchlist error:', e);
+    return Response.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
