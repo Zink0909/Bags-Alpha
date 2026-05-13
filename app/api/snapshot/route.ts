@@ -1,7 +1,9 @@
 import { analyzeTokens, analyzePools } from '@/lib/analyze';
 import { saveSnapshot } from '@/lib/supabase';
+import { checkCronAuth, unauthorizedResponse } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(req: Request) {
+  if (!checkCronAuth(req)) return unauthorizedResponse();
   try {
     const [feedTokens, poolTokens] = await Promise.allSettled([
       analyzeTokens(100),

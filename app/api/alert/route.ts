@@ -1,10 +1,12 @@
 import { analyzeTokens } from '@/lib/analyze';
 import { sendTelegramAlert, formatAlert } from '@/lib/telegram';
 import { getSupabase } from '@/lib/supabase';
+import { checkCronAuth, unauthorizedResponse } from '@/lib/auth';
 
 const SEEN_BREAKOUTS = new Set<string>();
 
-export async function GET() {
+export async function GET(req: Request) {
+  if (!checkCronAuth(req)) return unauthorizedResponse();
   try {
     const tokens = await analyzeTokens(50);
     const breakouts = tokens.filter(t => t.tag === 'Breakout' && t.potentialScore >= 70);
