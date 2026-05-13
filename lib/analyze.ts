@@ -4,10 +4,11 @@ import {
 } from './bags';
 import {
   computeTag, computePotentialScore, computeRiskScore,
-  feesToConversionScore, placeholderAttentionScore,
+  feesToConversionScore, feeGrowthToMomentumScore, placeholderAttentionScore,
   type TokenScore
 } from './score';
 import { getTwitterSignal } from './twitter';
+import { getPreviousFeesMap } from './supabase';
 
 function safeLamports(val: any): number {
   if (!val || typeof val !== 'string') return 0;
@@ -19,14 +20,15 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
   if (!feed || !Array.isArray(feed)) return [];
 
   const tokens = feed.slice(0, limit);
+  const mints = tokens.map((t: any) => t.tokenMint);
+  const prevFeesMap = await getPreviousFeesMap(mints).catch(() => ({} as Record<string, number>));
 
   const results = await Promise.allSettled(
     tokens.map(async (token: any) => {
       const mint = token.tokenMint;
 
-      const [feesRaw, claimRaw, poolRaw, twitterRaw] = await Promise.allSettled([
+      const [feesRaw, poolRaw, twitterRaw] = await Promise.allSettled([
         getLifetimeFees(mint),
-        getClaimStats(mint),
         getPool(mint),
         token.twitter && token.symbol ? getTwitterSignal(token.symbol) : Promise.resolve(null),
       ]);
@@ -35,15 +37,11 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
         ? safeLamports(feesRaw.value)
         : 0;
 
-      const claimData = claimRaw.status === 'fulfilled' ? claimRaw.value : [];
-      const totalClaimed = Array.isArray(claimData)
-        ? claimData.reduce((sum: number, c: any) => sum + safeLamports(c.totalClaimed), 0)
-        : 0;
-
-      const unclaimedRatio = lifetimeFeesSol > 0
-        ? Math.min((lifetimeFeesSol - totalClaimed) / lifetimeFeesSol, 1)
-        : 0;
-      const momentumScore = Math.round(unclaimedRatio * 100);
+      const prevFees = prevFeesMap[mint] ?? null;
+      const feeGrowth = prevFees !== null ? Math.max(0, lifetimeFeesSol - prevFees) : null;
+      const momentumScore = feeGrowth !== null
+        ? feeGrowthToMomentumScore(feeGrowth)
+        : Math.min(50, Math.round((lifetimeFeesSol > 0 ? 0.5 : 0) * 100));
 
       const poolData = poolRaw.status === 'fulfilled' ? poolRaw.value : null;
       const isGraduated = !!poolData?.dammV2PoolKey;
@@ -73,7 +71,7 @@ export async function analyzeTokens(limit = 50): Promise<TokenScore[]> {
         image: token.image || '',
         status: token.status,
         lifetimeFeesSol,
-        feeVelocity: totalClaimed,
+        feeVelocity: feeGrowth ?? 0,
         hasPool,
         isGraduated,
         creatorTwitter: token.twitter || '',
@@ -120,30 +118,28 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
     .sort((a, b) => b.sol - a.sol)
     .slice(0, limit);
 
+  const sweetspotMints = sweetspot.map((p: any) => p.mint);
+  const prevFeesMap = await getPreviousFeesMap(sweetspotMints).catch(() => ({} as Record<string, number>));
+
   const results = await Promise.allSettled(
     sweetspot.map(async (p: any) => {
-      const [meta, creatorsRaw, claimRaw] = await Promise.allSettled([
+      const [meta, creatorsRaw] = await Promise.allSettled([
         getAssetMetadata(p.mint),
         getCreators(p.mint),
-        getClaimStats(p.mint),
       ]);
 
       const metadata = meta.status === 'fulfilled' ? meta.value : { name: '', symbol: '', image: '' };
       const creators = creatorsRaw.status === 'fulfilled' ? (creatorsRaw.value || []) : [];
-      const claimData = claimRaw.status === 'fulfilled' ? (claimRaw.value || []) : [];
-
-      const totalClaimed = Array.isArray(claimData)
-        ? claimData.reduce((sum: number, c: any) => sum + safeLamports(c.totalClaimed), 0)
-        : 0;
 
       const twitterUrl = creators[0]?.twitterUsername
         ? 'https://x.com/' + creators[0].twitterUsername
         : '';
 
-      const unclaimedRatio = p.sol > 0
-        ? Math.min((p.sol - totalClaimed) / p.sol, 1)
-        : 0;
-      const momentumScore = Math.round(unclaimedRatio * 100);
+      const prevFees = prevFeesMap[p.mint] ?? null;
+      const feeGrowth = prevFees !== null ? Math.max(0, p.sol - prevFees) : null;
+      const momentumScore = feeGrowth !== null
+        ? feeGrowthToMomentumScore(feeGrowth)
+        : Math.min(50, Math.round((p.sol > 0 ? 0.5 : 0) * 100));
 
       const twitterSignal = metadata.symbol && twitterUrl
         ? await getTwitterSignal(metadata.symbol).catch(() => null)
@@ -169,7 +165,7 @@ export async function analyzePools(limit = 50): Promise<TokenScore[]> {
         image: metadata.image,
         status: p.isGraduated ? 'GRADUATED' : 'PRE_GRAD',
         lifetimeFeesSol: p.sol,
-        feeVelocity: totalClaimed,
+        feeVelocity: feeGrowth ?? 0,
         hasPool: true,
         isGraduated: p.isGraduated,
         creatorTwitter: twitterUrl,

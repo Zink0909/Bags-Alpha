@@ -91,6 +91,22 @@ export async function getLatestSnapshot() {
   }));
 }
 
+export async function getPreviousFeesMap(mints: string[]): Promise<Record<string, number>> {
+  if (!mints.length) return {};
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from('token_snapshots')
+    .select('mint, lifetime_fees_sol, captured_at')
+    .in('mint', mints)
+    .order('captured_at', { ascending: false });
+  if (!data) return {};
+  const map: Record<string, number> = {};
+  for (const row of data) {
+    if (!(row.mint in map)) map[row.mint] = row.lifetime_fees_sol;
+  }
+  return map;
+}
+
 export async function getFeeHistory(mint: string, hours = 24) {
   const supabase = getSupabase();
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();

@@ -77,6 +77,14 @@ export function feesToConversionScore(sol: number): number {
   return Math.min(Math.max(Math.round(score), 0), 100);
 }
 
+// Fee growth delta → momentum score (0-100, log scale)
+// 0.001 SOL growth → ~9, 0.01 → ~32, 0.1 → ~61, 0.5 → ~82, 1+ → ~91
+export function feeGrowthToMomentumScore(deltaSol: number): number {
+  if (deltaSol <= 0) return 0;
+  const log = Math.log10(deltaSol + 0.001) + 3;
+  return Math.min(Math.max(Math.round((log / 3.3) * 100), 0), 100);
+}
+
 // Conservative fallback when X API is unavailable
 // Does NOT give high scores — only real X data should give high attention
 export function placeholderAttentionScore(twitterUrl: string): number {
