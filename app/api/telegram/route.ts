@@ -1,6 +1,7 @@
 import { getSupabase } from '@/lib/supabase';
 import { sendTelegramAlert } from '@/lib/telegram';
 import { getLatestSnapshot } from '@/lib/supabase';
+import { unauthorizedResponse } from '@/lib/auth';
 
 async function sendMessage(chatId: string, text: string) {
   const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -17,6 +18,11 @@ async function sendMessage(chatId: string, text: string) {
 }
 
 export async function POST(req: Request) {
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (secret && req.headers.get('x-telegram-bot-api-secret-token') !== secret) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body = await req.json();
     const message = body?.message;
