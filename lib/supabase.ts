@@ -165,7 +165,7 @@ export async function getHistoricalPattern(tag: string, scoreMin: number, scoreM
   if (deltas.length === 0) return null;
 
   deltas.sort((a, b) => a - b);
-  const median = deltas[Math.floor(deltas.length / 2)];
+  const median = deltas[Math.floor((deltas.length - 1) / 2)];
   const positive = deltas.filter(d => d > 0).length;
   const positivePct = Math.round((positive / deltas.length) * 100);
   const avgDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;

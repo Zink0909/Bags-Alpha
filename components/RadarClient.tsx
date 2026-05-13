@@ -16,6 +16,8 @@ export default function RadarClient({ tokens: initialTokens, topTokens }: { toke
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     const connect = () => {
       if (esRef.current) esRef.current.close();
       const es = new EventSource('/api/stream');
@@ -33,11 +35,14 @@ export default function RadarClient({ tokens: initialTokens, topTokens }: { toke
       es.onerror = () => {
         setConnected(false);
         es.close();
-        setTimeout(connect, 10000);
+        reconnectTimer = setTimeout(connect, 10000);
       };
     };
     connect();
-    return () => esRef.current?.close();
+    return () => {
+      esRef.current?.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
   }, []);
 
   useEffect(() => {

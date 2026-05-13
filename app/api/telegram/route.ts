@@ -3,6 +3,8 @@ import { sendTelegramAlert } from '@/lib/telegram';
 import { getLatestSnapshot } from '@/lib/supabase';
 import { unauthorizedResponse } from '@/lib/auth';
 
+const BAGS_ALPHA_URL = process.env.BAGS_ALPHA_URL || 'https://bags-alpha-pied.vercel.app';
+
 async function sendMessage(chatId: string, text: string) {
   const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
@@ -14,6 +16,7 @@ async function sendMessage(chatId: string, text: string) {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
     }),
+    signal: AbortSignal.timeout(10_000),
   });
 }
 
@@ -58,7 +61,7 @@ export async function POST(req: Request) {
         const lines = ['<b>Top Breakout Tokens</b>', ''];
         for (const t of breakouts) {
           lines.push(`▲ <b>${t.symbol}</b> — Score ${t.potentialScore}`);
-          lines.push(`<a href="https://bags-alpha-pied.vercel.app/token/${t.mint}">View on Bags Alpha</a>`);
+          lines.push(`<a href="${BAGS_ALPHA_URL}/token/${t.mint}">View on Bags Alpha</a>`);
           lines.push('');
         }
         await sendMessage(chatId, lines.join('\n'));

@@ -10,6 +10,9 @@ export async function POST(req: Request) {
     if (!creatorUsername || !telegramChatId) {
       return Response.json({ success: false, error: 'Missing fields' }, { status: 400 });
     }
+    if (!/^-?\d{5,15}$/.test(String(telegramChatId))) {
+      return Response.json({ success: false, error: 'Invalid chatId' }, { status: 400 });
+    }
     const supabase = getSupabase();
     const { error } = await supabase.from('watchlist').insert({
       telegram_chat_id: telegramChatId,
@@ -31,6 +34,12 @@ export async function DELETE(req: Request) {
   }
   try {
     const { creatorUsername, telegramChatId } = await req.json();
+    if (!creatorUsername || !telegramChatId) {
+      return Response.json({ success: false, error: 'Missing fields' }, { status: 400 });
+    }
+    if (!/^-?\d{5,15}$/.test(String(telegramChatId))) {
+      return Response.json({ success: false, error: 'Invalid chatId' }, { status: 400 });
+    }
     const supabase = getSupabase();
     await supabase.from('watchlist')
       .delete()

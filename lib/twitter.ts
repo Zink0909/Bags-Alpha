@@ -95,7 +95,7 @@ async function getCreatorPostFrequency(username: string): Promise<number> {
     const newest = Math.max(...times);
     const oldest = Math.min(...times);
     const daySpan = (newest - oldest) / (1000 * 60 * 60 * 24);
-    if (daySpan === 0) return 7;
+    if (daySpan < 0.01) return tweetsData.data.length * 7;
     return Math.round((tweetsData.data.length / daySpan) * 7 * 10) / 10;
   } catch {
     return 0;

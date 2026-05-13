@@ -2,7 +2,7 @@ import { getSupabase } from '@/lib/supabase';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const q = searchParams.get('q')?.trim().replace(/^@/, '').toLowerCase();
+  const q = searchParams.get('q')?.trim().replace(/^@/, '').toLowerCase().replace(/[%_\\]/g, '');
   if (!q || q.length < 2) return Response.json({ suggestions: [] });
 
   const supabase = getSupabase();

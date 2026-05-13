@@ -1,9 +1,12 @@
 const store = new Map<string, { count: number; resetAt: number }>();
 const MAX_SIZE = 5000;
 
+let lastCleanup = 0;
+
 function cleanup() {
-  if (store.size < MAX_SIZE) return;
   const now = Date.now();
+  if (store.size < MAX_SIZE && now - lastCleanup < 60_000) return;
+  lastCleanup = now;
   for (const [key, entry] of store) {
     if (now > entry.resetAt) store.delete(key);
   }

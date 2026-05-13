@@ -15,6 +15,7 @@ export async function sendTelegramAlert(message: string, chatId?: string) {
         parse_mode: "HTML",
         disable_web_page_preview: true,
       }),
+      signal: AbortSignal.timeout(10_000),
     });
     const result = await res.json();
     console.log('TG:', JSON.stringify(result));
